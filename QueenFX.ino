@@ -5,6 +5,7 @@
 #define NUM_LEDS_PER_STRIP 185
 #define ledCount NUM_LEDS_PER_STRIP
 #define NUM_STRIPS 16 
+#define UPDATES_PER_SECOND 200
 
 CMux mux;
 
@@ -32,21 +33,155 @@ float tcount = 0.0;      //-INC VAR FOR SIN LOOPS
 int lcount = 0;      //-ANOTHER COUNTING VAR
 //byte eq[7] ={};
 
+
+// color palette related stuff
+CRGBPalette16 currentPalette;
+TBlendType    currentBlending;
+
+extern CRGBPalette16 myRedWhiteBluePalette;
+extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
+
+
 //------------------SETUP------------------
 void setup()
 {
-    delay(1000);
+  delay(1000);
             
   LEDS.addLeds<WS2811_PORTDC,16>(*leds, ledCount);
-    // For safety (to prevent too high of a power draw), the test case defaults to
-    // setting brightness to 25% brightness
-  LEDS.setBrightness(255);
+  LEDS.setBrightness(128);
         
-    Serial.begin(57600);
-    fillSolid(0,0,0); //-BLANK STRIP
+  currentPalette = RainbowColors_p;
+  currentBlending = LINEARBLEND;
+
+  Serial.begin(57600);
+  Serial.println(F("https://github.com/zekekoch/QueenFX"));
+  fillSolid(0,0,0); //-BLANK STRIP
     
-    LEDS.show();
+  LEDS.show();
 }
+
+void colorPaletteLoop()
+{
+    ChangePalettePeriodically();
+    
+    static uint8_t startIndex = 0;
+    startIndex = startIndex + 1; /* motion speed */
+    
+    FillLEDsFromPaletteColors( startIndex, 3);
+    
+    FastLED.show();
+    FastLED.delay(1000 / UPDATES_PER_SECOND);
+}
+
+void FillLEDsFromPaletteColors( uint8_t colorIndex, uint8_t width)
+{
+    uint8_t brightness = 255;
+    
+    for(int iStrip = 0;iStrip < NUM_STRIPS;iStrip++)
+    {
+        for( int iLed = 0; iLed < ledCount;iLed++) 
+        {
+            leds[iStrip][iLed] = ColorFromPalette( currentPalette, colorIndex, brightness, currentBlending);
+            // how quickly you move through the colors is how wide the strips are of a given color
+            colorIndex+=width;
+        }
+    }
+}
+
+
+// There are several different palettes of colors demonstrated here.
+//
+// FastLED provides several 'preset' palettes: RainbowColors_p, RainbowStripeColors_p,
+// OceanColors_p, CloudColors_p, LavaColors_p, ForestColors_p, and PartyColors_p.
+//
+// Additionally, you can manually define your own color palettes, or you can write
+// code that creates color palettes on the fly.  All are shown here.
+
+void ChangePalettePeriodically()
+{
+    uint8_t secondHand = (millis() / 1000) % 60;
+    static uint8_t lastSecond = 99;
+    
+    if( lastSecond != secondHand) {
+        lastSecond = secondHand;
+        if( secondHand ==  0)  { currentPalette = RainbowStripeColors_p;   currentBlending = NOBLEND;  }
+        if( secondHand == 10)  { currentPalette = RainbowColors_p;         currentBlending = LINEARBLEND; }
+        if( secondHand == 15)  { currentPalette = RainbowStripeColors_p;   currentBlending = LINEARBLEND; }
+        if( secondHand == 20)  { SetupPurpleAndGreenPalette();             currentBlending = LINEARBLEND; }
+        if( secondHand == 25)  { SetupTotallyRandomPalette();              currentBlending = LINEARBLEND; }
+        if( secondHand == 30)  { SetupBlackAndWhiteStripedPalette();       currentBlending = NOBLEND; }
+        if( secondHand == 35)  { SetupBlackAndWhiteStripedPalette();       currentBlending = LINEARBLEND; }
+        if( secondHand == 40)  { currentPalette = CloudColors_p;           currentBlending = LINEARBLEND; }
+        if( secondHand == 45)  { currentPalette = PartyColors_p;           currentBlending = LINEARBLEND; }
+        if( secondHand == 50)  { currentPalette = myRedWhiteBluePalette_p; currentBlending = NOBLEND;  }
+        if( secondHand == 55)  { currentPalette = myRedWhiteBluePalette_p; currentBlending = LINEARBLEND; }
+    }
+}
+
+// This function fills the palette with totally random colors.
+void SetupTotallyRandomPalette()
+{
+    for( int i = 0; i < 16; i++) {
+        currentPalette[i] = CHSV( random8(), 255, random8());
+    }
+}
+
+// This function sets up a palette of black and white stripes,
+// using code.  Since the palette is effectively an array of
+// sixteen CRGB colors, the various fill_* functions can be used
+// to set them up.
+void SetupBlackAndWhiteStripedPalette()
+{
+    // 'black out' all 16 palette entries...
+    fill_solid( currentPalette, 16, CRGB::Black);
+    // and set every fourth one to white.
+    currentPalette[0] = CRGB::White;
+    currentPalette[4] = CRGB::White;
+    currentPalette[8] = CRGB::White;
+    currentPalette[12] = CRGB::White;
+    
+}
+
+// This function sets up a palette of purple and green stripes.
+void SetupPurpleAndGreenPalette()
+{
+    CRGB purple = CHSV( HUE_PURPLE, 255, 255);
+    CRGB green  = CHSV( HUE_GREEN, 255, 255);
+    CRGB black  = CRGB::Black;
+    
+    currentPalette = CRGBPalette16(
+                                   green,  green,  black,  black,
+                                   purple, purple, black,  black,
+                                   green,  green,  black,  black,
+                                   purple, purple, black,  black );
+}
+
+// This function sets up a palette of purple and green stripes.
+void SetupAmericaPalette()
+{
+    currentPalette = CRGBPalette16
+    (
+        CRGB::Red, CRGB::Red, CRGB::Red, CRGB::Red,  
+        CRGB::Red, CRGB::White, CRGB::White, CRGB::White, 
+        CRGB::White, CRGB::White, CRGB::White, CRGB::Blue, 
+        CRGB::Blue, CRGB::Blue, CRGB::Blue, CRGB::Blue 
+    );
+}
+
+
+
+// This example shows how to set up a static color palette
+// which is stored in PROGMEM (flash), which is almost always more
+// plentiful than RAM.  A static PROGMEM palette like this
+// takes up 64 bytes of flash.
+const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM =
+{
+    // Gray looks better than White because white is brighter than blue and red
+    CRGB::Red, CRGB::Gray, CRGB::Blue, CRGB::Black,
+    CRGB::Red, CRGB::Gray, CRGB::Blue, CRGB::Black,
+    CRGB::Red, CRGB::Red, CRGB::Gray, CRGB::Gray,    
+    CRGB::Blue, CRGB::Blue, CRGB::Black, CRGB::Black
+};
 
 
 //------------------------------------- UTILITY FXNS --------------------------------------
@@ -201,7 +336,7 @@ void fillSolid(byte strand, const CRGB& color)
 
 void fillSolid(CRGB color)
 {
-    for(int i = 0;i<7;i++)
+    for(int i = 0;i<NUM_STRIPS;i++)
         fillSolid(i, color);
 }
 
@@ -212,7 +347,7 @@ void fillSolid(int cred, int cgrn, int cblu) { //-SET ALL LEDS TO ONE COLOR
 void rotatingRainbow()
 {
     static byte hue = 0;
-    for(int i = 0;i < 7;i++)
+    for(int i = 0;i < NUM_STRIPS;i++)
     {
         fill_rainbow(leds[i], ledCount, hue++, 10);
     }
@@ -220,7 +355,7 @@ void rotatingRainbow()
 
 
 
-void rainbow_fade(int idelay) { //-FADE ALL LEDS THROUGH HSV RAINBOW
+void rainbow_fade() { //-FADE ALL LEDS THROUGH HSV RAINBOW
     ihue++;
     CRGB thisColor;
     HSVtoRGB(ihue, 255, 255, thisColor);
@@ -287,7 +422,7 @@ void color_bounce(int idelay) { //-BOUNCE COLOR (SINGLE LED)
 }
 
 
-void police_lightsONE(int idelay) { //-POLICE LIGHTS (TWO COLOR SINGLE LED)
+void police_lightsONE() { //-POLICE LIGHTS (TWO COLOR SINGLE LED)
     idex++;
     if (idex >= ledCount) {
         idex = 0;
@@ -307,8 +442,17 @@ void police_lightsONE(int idelay) { //-POLICE LIGHTS (TWO COLOR SINGLE LED)
     }
 }
 
+void police_lightsALL()
+{
+    static byte colorIndex;
+    SetupAmericaPalette();
+    currentBlending = LINEARBLEND;
 
-void police_lightsALL(int idelay) { //-POLICE LIGHTS (TWO COLOR SOLID)
+    // the first variable is the speed at which the lights march, the second is the width of the bars
+    FillLEDsFromPaletteColors(colorIndex+=12, 3);
+}
+
+void police_lightsALLOld() { //-POLICE LIGHTS (TWO COLOR SOLID)
     idex++;
     if (idex >= ledCount) {idex = 0;}
     int idexR = idex;
@@ -323,13 +467,9 @@ void fourthOfJuly() { //-red, white and blue
     int idexR = idex;
     int idexW = nextThird(idexR);
     int idexB = nextThird(idexW);
-    setPixel(idexR, 255, 0, 0);
-    setPixel(idexW, 255, 255, 255);
-    setPixel(idexB, 0, 0, 255);
-}
-
-void yxyySeizure() {
-  
+    setPixel(idexR, CRGB::Red);
+    setPixel(idexW, CRGB::White);
+    setPixel(idexB, CRGB::Blue);
 }
 
 void yxyy() { //-red, white and blue
@@ -514,41 +654,6 @@ void pulse_one_color_all_rev(int ahue, int idelay) { //-PULSE SATURATION ON ALL 
     }
 }
 
-
-void random_red() { //QUICK 'N DIRTY RANDOMIZE TO GET CELL AUTOMATA STARTED
-    int temprand;
-    for(int i = 0; i < ledCount; i++ ) {
-        for(int strip = 0;strip < NUM_STRIPS;strip++)
-        {
-            temprand = random(0,100);
-            if (temprand > 50) {leds[strip][i].r = 255;}
-            if (temprand <= 50) {leds[strip][i].r = 0;}
-            leds[strip][i].b = 0; leds[strip][i].g = 0;
-        }
-    }
-}
-
-// todo: make this work with multiple arrays
-void rule30(int idelay) { //1D CELLULAR AUTOMATA - RULE 30 (RED FOR NOW)
-    copy_led_array();
-    int iCW;
-    int iCCW;
-    int y = 100;
-    for(int i = 0; i < ledCount; i++ ) {
-        iCW = adjacent_cw(i);
-        iCCW = adjacent_ccw(i);
-        if (ledsX[iCCW][0] > y && ledsX[i][0] > y && ledsX[iCW][0] > y) {leds[0][i].r = 0;}
-        if (ledsX[iCCW][0] > y && ledsX[i][0] > y && ledsX[iCW][0] <= y) {leds[0][i].r = 0;}
-        if (ledsX[iCCW][0] > y && ledsX[i][0] <= y && ledsX[iCW][0] > y) {leds[0][i].r = 0;}
-        if (ledsX[iCCW][0] > y && ledsX[i][0] <= y && ledsX[iCW][0] <= y) {leds[0][i].r = 255;}
-        if (ledsX[iCCW][0] <= y && ledsX[i][0] > y && ledsX[iCW][0] > y) {leds[0][i].r = 255;}
-        if (ledsX[iCCW][0] <= y && ledsX[i][0] > y && ledsX[iCW][0] <= y) {leds[0][i].r = 255;}
-        if (ledsX[iCCW][0] <= y && ledsX[i][0] <= y && ledsX[iCW][0] > y) {leds[0][i].r = 255;}
-        if (ledsX[iCCW][0] <= y && ledsX[i][0] <= y && ledsX[iCW][0] <= y) {leds[0][i].r = 0;}
-    }
-}
-
-
 void random_march(int idelay) { //RANDOM MARCH CCW
     copy_led_array();
     int iCCW;
@@ -576,10 +681,10 @@ void rwb_march(int idelay) { //R,W,B MARCH CCW
             setPixel(0, CRGB::Red);
             break;
         case 1:
-            setPixel(0, 255, 255, 255);
+            setPixel(0, CRGB::White);
             break;
         case 2:
-            setPixel(0, 0, 0, 255);
+            setPixel(0, CRGB::Blue);
             break;
     }
     
@@ -807,34 +912,6 @@ void rainbow_vertical(int istep, int idelay) { //-RAINBOW 'UP' THE LOOP
 
 }
 
-
-void pacman(int idelay) { //-MARCH STRIP C-W
-    int s = int(ledCount/4);
-    lcount++;
-    if (lcount > 5) {lcount = 0;}
-    if (lcount == 0) {
-        fillSolid(255,255,0);
-    }
-    if (lcount == 1 || lcount == 5) {
-        fillSolid(255,255,0);
-        setPixel(s,CRGB(0,0,0));
-    }
-    if (lcount == 2 || lcount == 4) {
-        fillSolid(255,255,0);
-        setPixel(s-1,CRGB(0,0,0));
-        setPixel(s,CRGB(0,0,0));
-        setPixel(s+1,CRGB(0,0,0));
-    }
-    if (lcount == 3) {
-        fillSolid(255,255,0);
-        setPixel(s-2,CRGB(0,0,0));
-        setPixel(s-1,CRGB(0,0,0));
-        setPixel(s,CRGB(0,0,0));
-        setPixel(s+1,CRGB(0,0,0));
-        setPixel(s+2,CRGB(0,0,0));
-    }
-}
-
 int getModeFromSerial() {
     // if there's any serial available, read it:
     while (Serial.available() > 0) {
@@ -854,7 +931,7 @@ boolean checkButton(byte whichButton)
     {
         if (0 == whichButton)
         {
-            return mux.getEmission();
+            return mux.getDynamicIntensifier();
         }
     }
     else
@@ -863,16 +940,57 @@ boolean checkButton(byte whichButton)
     }
 }
 
+void onSelectorChange(byte dialState)
+{
+    switch(dialState)
+    {
+        case 0:
+            //---STRIP RAINBOW FADE
+            rainbow_fade();
+            break;
+        case 1:
+            //---RAINBOW LOOP
+            rainbow_loop(10, 20);         
+        break;
+        case 2:
+            //--- VERITCAL RAINBOW
+            rainbow_vertical(7, 20);
+            break;
+        case 3:
+            rotatingRainbow();
+            break;
+        case 4:
+            if (mux.getEmission())
+                //---POLICE SINGLE
+                police_lightsONE();
+            else
+                //---POLICE SOLID
+                police_lightsALL();
+        break;
+        case 5:
+        break;
+
+    }
+
+}
+
 //------------------MAIN LOOP------------------
 void loop() {
+  // Add entropy to random number generator; we use a lot of it.
+  random16_add_entropy( random());
 
-    //
-    if (checkButton(0))
-    {
-      ledMode++;
-      if (ledMode > 27)
-        ledMode = 0;
-    }
+    mux.getCutOff();
+    mux.print();
+
+    Fire2012WithPalette(); // run simulation frame, using palette colors
+
+    //police_lightsALL();
+
+    LEDS.show();
+    FastLED.delay(1000/UPDATES_PER_SECOND);
+    return;
+
+    onSelectorChange(mux.getDial());
 
     if (mux.getCutOff() < 25)
         strip_march_cw(100);
@@ -892,18 +1010,15 @@ void loop() {
             break;
     }
     
-    if (ledMode == 2) {rainbow_fade(20);}                //---STRIP RAINBOW FADE
-    if (ledMode == 3) {rainbow_loop(10, 20);}            //---RAINBOW LOOP
+
     if (ledMode == 4) {random_burst(20);}                //---RANDOM
     if (ledMode == 5) {color_bounce(20);}                //---CYLON v1
     if (ledMode == 6) {color_bounceFADE(20);}            //---CYLON v2
-    if (ledMode == 7) {police_lightsONE(40);}            //---POLICE SINGLE
-    if (ledMode == 8) {police_lightsALL(40);}            //---POLICE SOLID
+
     if (ledMode == 9) {flicker(200,255);}                //---STRIP FLICKER
     if (ledMode == 10) {pulse_one_color_all(0, 10);}     //--- PULSE COLOR BRIGHTNESS
     if (ledMode == 11) {pulse_one_color_all_rev(0, 10);} //--- PULSE COLOR SATURATION
     if (ledMode == 12) {fade_vertical(240, 60);}         //--- VERTICAL SOMETHING
-    if (ledMode == 13) {rule30(100);}                    //--- CELL AUTO - RULE 30 (RED)
     if (ledMode == 14) {random_march(30);}               //--- MARCH RANDOM COLORS
     if (ledMode == 15) {rwb_march(50);}                  //--- MARCH RWB COLORS
     if (ledMode == 16) {radiation(120, 60);}             //--- RADIATION SYMBOL (OR SOME APPROXIMATION)
@@ -913,11 +1028,8 @@ void loop() {
     if (ledMode == 20) {pop_horizontal(300, 100);}       //--- POP LEFT/RIGHT
     if (ledMode == 21) {quad_bright_curve(240, 100);}    //--- QUADRATIC BRIGHTNESS CURVE  
     if (ledMode == 22) {flame();}                        //--- FLAME-ISH EFFECT
-    if (ledMode == 23) {rainbow_vertical(7, 20);}       //--- VERITCAL RAINBOW
-    if (ledMode == 24) {pacman(100);}                     //--- PACMAN
     //if (ledMode == 25) {musicReactiveFade(mux.getCutOff());}
     if (ledMode == 26) {fourthOfJuly();}
-    if (ledMode == 27) {rotatingRainbow();}
     if (ledMode == 28) {yxyy();}
     
     
@@ -929,7 +1041,78 @@ void loop() {
     if (ledMode == 106) {fillSolid(255,0,255);}  //---106- STRIP SOLID VIOLET?
     
     LEDS.show();
-    delay(5);
+    FastLED.delay(1000 / UPDATES_PER_SECOND);
+}
+
+// Fire2012 by Mark Kriegsman, July 2012
+// as part of "Five Elements" shown here: http://youtu.be/knWiGsmgycY
+//// 
+// This basic one-dimensional 'fire' simulation works roughly as follows:
+// There's a underlying array of 'heat' cells, that model the temperature
+// at each point along the line.  Every cycle through the simulation, 
+// four steps are performed:
+//  1) All cells cool down a little bit, losing heat to the air
+//  2) The heat from each cell drifts 'up' and diffuses a little
+//  3) Sometimes randomly new 'sparks' of heat are added at the bottom
+//  4) The heat from each cell is rendered as a color into the leds array
+//     The heat-to-color mapping uses a black-body radiation approximation.
+//
+// Temperature is in arbitrary units from 0 (cold black) to 255 (white hot).
+//
+// This simulation scales it self a bit depending on NUM_LEDS; it should look
+// "OK" on anywhere from 20 to 100 LEDs without too much tweaking. 
+//
+// I recommend running this simulation at anywhere from 30-100 frames per second,
+// meaning an interframe delay of about 10-35 milliseconds.
+//
+// Looks best on a high-density LED setup (60+ pixels/meter).
+//
+//
+// There are two main parameters you can play with to control the look and
+// feel of your fire: COOLING (used in step 1 above), and SPARKING (used
+// in step 3 above).
+//
+// COOLING: How much does the air cool as it rises?
+// Less cooling = taller flames.  More cooling = shorter flames.
+// Default 55, suggested range 20-100 
+#define COOLING  55
+
+// SPARKING: What chance (out of 255) is there that a new spark will be lit?
+// Higher chance = more roaring fire.  Lower chance = more flickery fire.
+// Default 120, suggested range 50-200.
+#define SPARKING 120
+
+
+void Fire2012WithPalette()
+{
+// Array of temperature readings at each simulation cell
+  static byte heat[ledCount];
+
+  // Step 1.  Cool down every cell a little
+    for( int i = 0; i < ledCount; i++) {
+      heat[i] = qsub8( heat[i],  random8(0, ((COOLING * 10) / ledCount) + 2));
+    }
+  
+    // Step 2.  Heat from each cell drifts 'up' and diffuses a little
+    for( int k= ledCount - 1; k >= 2; k--) {
+      heat[k] = (heat[k - 1] + heat[k - 2] + heat[k - 2] ) / 3;
+    }
+    
+    // Step 3.  Randomly ignite new 'sparks' of heat near the bottom
+    if( random8() < SPARKING ) {
+      int y = random8(7);
+      heat[y] = qadd8( heat[y], random8(160,255) );
+    }
+
+    // Step 4.  Map from heat cells to LED colors
+    for( int j = 0; j < ledCount; j++) {
+      // Scale the heat value from 0-255 down to 0-240
+      // for best results with color palettes.
+      byte colorindex = scale8( heat[j], 240);
+
+      for(byte iStrip = 0;iStrip<NUM_STRIPS;iStrip++)
+          leds[iStrip][j] = ColorFromPalette( currentPalette, colorindex);
+    }
 }
 
 /*
