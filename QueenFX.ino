@@ -2,7 +2,7 @@
 #include <FastLED.h>
 #include "Mux.h"
 
-#define NUM_LEDS_PER_STRIP 185
+#define NUM_LEDS_PER_STRIP 139
 #define ledCount NUM_LEDS_PER_STRIP
 #define NUM_STRIPS 16 
 #define UPDATES_PER_SECOND 200
@@ -601,17 +601,16 @@ void color_bounceFADE(int idelay) { //-BOUNCE COLOR (SIMPLE MULTI-LED FADE)
 
 void flicker(int thishue, int thissat) {
     int random_bright = random(0,255);
-    int random_delay = random(10,100);
     int random_bool = random(0,random_bright);
     CRGB thisColor;
     
-    //if (random_bool < 10) {
+    if (random_bool < 10) {
         HSVtoRGB(thishue, thissat, random_bright, thisColor);
         
         for(int i = 0 ; i < ledCount; i++ ) {
             setPixel(i, thisColor);
         }
-   // }
+    }
 }
 
 
@@ -727,8 +726,8 @@ void color_loop_vardelay() { //-COLOR LOOP (SINGLE LED) w/ VARIABLE DELAY
     CRGB acolor;
     HSVtoRGB(0, 255, 255, acolor);
     
-    int di = abs(TOP_INDEX - idex); //-DISTANCE TO CENTER
-    int t = constrain((10/di)*10, 10, 500); //-DELAY INCREASE AS INDEX APPROACHES CENTER (WITHIN LIMITS)
+    //int di = abs(TOP_INDEX - idex); //-DISTANCE TO CENTER
+    //int t = constrain((10/di)*10, 10, 500); //-DELAY INCREASE AS INDEX APPROACHES CENTER (WITHIN LIMITS)
     
     for(int i = 0; i < ledCount; i++ ) {
         if (i == idex) {
@@ -765,7 +764,7 @@ void pop_horizontal(int ahue, int idelay) {  //-POP FROM LEFT TO RIGHT UP THE RI
     CRGB acolor;
     HSVtoRGB(ahue, 255, 255, acolor);
     
-    int ix;
+    int ix =0;
     
     if (bouncedirection == 0) {
         bouncedirection = 1;
@@ -814,7 +813,7 @@ void quad_bright_curve(int ahue, int idelay) {  //-QUADRATIC BRIGHTNESS CURVER
 
 void flame() {
     CRGB acolor;
-    int idelay = random(0,35);
+//    int idelay = random(0,35);
     
     float hmin = 0.1; float hmax = 45.0;
     float hdif = hmax-hmin;
@@ -912,18 +911,6 @@ void rainbow_vertical(int istep, int idelay) { //-RAINBOW 'UP' THE LOOP
 
 }
 
-int getModeFromSerial() {
-    // if there's any serial available, read it:
-    while (Serial.available() > 0) {
-        // look for the next valid integer in the incoming serial stream:
-        int iMode = Serial.parseInt();
-        Serial.print("switching to:");Serial.println(iMode);
-        // look for the newline. That's the end of your
-        // sentence:
-        return iMode;
-    }
-}
-
 boolean checkButton(byte whichButton)
 {
     static unsigned long lastTime = millis();
@@ -934,10 +921,8 @@ boolean checkButton(byte whichButton)
             return mux.getDynamicIntensifier();
         }
     }
-    else
-    {
-        return false;
-    }
+    
+    return false;
 }
 
 void onSelectorChange(byte dialState)
@@ -979,10 +964,36 @@ void loop() {
   // Add entropy to random number generator; we use a lot of it.
   random16_add_entropy( random());
 
+  static int iDelay = 0;
+  if (iDelay++ > 10)
+  {    
+    iDelay = 0;
     mux.getCutOff();
     mux.print();
+  }
 
-    Fire2012WithPalette(); // run simulation frame, using palette colors
+  fillSolid(CHSV(mux.getCutOff(), 255, 255));
+
+  // Set the first n leds on each strip to show which strip it is
+  for(int i = 0; i < NUM_STRIPS; i++) {
+    for(int j = 0; j <= i; j++) {
+      leds[i][j] = CRGB::Red;
+    }
+  }
+
+  for(int i = 0;i< NUM_STRIPS;i++)
+  {
+    leds[i][ledCount-1] = CRGB::Blue;
+    leds[i][ledCount/2-1] = CRGB::White;
+    for(int l = 0;l<ledCount;l++)
+    {
+      if (l % 10 == 0)
+            leds[i][l] = CRGB::Purple;
+    }
+  }
+
+
+//    Fire2012WithPalette(); // run simulation frame, using palette colors
 
     //police_lightsALL();
 
@@ -1067,34 +1078,36 @@ void loop() {
 //
 // Looks best on a high-density LED setup (60+ pixels/meter).
 //
-//
 // There are two main parameters you can play with to control the look and
 // feel of your fire: COOLING (used in step 1 above), and SPARKING (used
 // in step 3 above).
-//
-// COOLING: How much does the air cool as it rises?
-// Less cooling = taller flames.  More cooling = shorter flames.
-// Default 55, suggested range 20-100 
-#define COOLING  55
-
-// SPARKING: What chance (out of 255) is there that a new spark will be lit?
-// Higher chance = more roaring fire.  Lower chance = more flickery fire.
-// Default 120, suggested range 50-200.
-#define SPARKING 120
-
 
 void Fire2012WithPalette()
 {
-// Array of temperature readings at each simulation cell
-  static byte heat[ledCount];
+
+    // COOLING: How much does the air cool as it rises?
+    // Less cooling = taller flames.  More cooling = shorter flames.
+    // Default 55, suggested range 20-100 
+    const byte COOLING = 55;
+
+
+    // SPARKING: What chance (out of 255) is there that a new spark will be lit?
+    // Higher chance = more roaring fire.  Lower chance = more flickery fire.
+    // Default 120, suggested range 50-200.
+    const byte SPARKING = 120;
+
+    // Array of temperature readings at each simulation cell
+    static byte heat[ledCount];
+
 
   // Step 1.  Cool down every cell a little
-    for( int i = 0; i < ledCount; i++) {
-      heat[i] = qsub8( heat[i],  random8(0, ((COOLING * 10) / ledCount) + 2));
+    for (int i = 0; i < (ledCount); i++) 
+    {
+      heat[i] = qsub8(heat[i], random8(0, ((COOLING * 10) / (ledCount) + 2)));
     }
   
     // Step 2.  Heat from each cell drifts 'up' and diffuses a little
-    for( int k= ledCount - 1; k >= 2; k--) {
+    for(int k = (ledCount) - 1; k >= 2; k--) {
       heat[k] = (heat[k - 1] + heat[k - 2] + heat[k - 2] ) / 3;
     }
     
@@ -1105,7 +1118,7 @@ void Fire2012WithPalette()
     }
 
     // Step 4.  Map from heat cells to LED colors
-    for( int j = 0; j < ledCount; j++) {
+    for( int j = 0; j < (ledCount); j++) {
       // Scale the heat value from 0-255 down to 0-240
       // for best results with color palettes.
       byte colorindex = scale8( heat[j], 240);
