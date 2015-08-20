@@ -2,20 +2,26 @@
 #include <FastLED.h>
 #include "Mux.h"
 
-#define NUM_LEDS_PER_STRIP 139
-#define ledCount NUM_LEDS_PER_STRIP
-#define NUM_STRIPS 16 
-#define UPDATES_PER_SECOND 200
+const byte realLedCount = 192;
+const byte ledCount = 139;
+const byte realNumStrips = 12;
+const byte numStrips = 14;
+const byte UPDATES_PER_SECOND =200;
+
+// the front of the car has shorter lights
+const byte stripLengths[14] = {36, 70, 84, 102, 115, 126, 139, 139, 139, 139, 139, 139, 139, 139} ;
 
 CMux mux;
 
+// globals for FX animations
 int BOTTOM_INDEX = 0;
 int TOP_INDEX = int(ledCount/2);
 int FIRST_THIRD = int(ledCount/3);
 int SECOND_THIRD = FIRST_THIRD * 2;
 int EVENODD = ledCount%2;
 
-CRGB leds[NUM_STRIPS][ledCount];
+CRGB realLeds[numStrips][realLedCount];
+CRGB leds[numStrips][ledCount];
 CRGB ledsX[ledCount]; //-ARRAY FOR COPYING WHATS IN THE LED STRIP CURRENTLY (FOR CELL-AUTOMATA, ETC)
 const byte ledCounts[] = { };
 
@@ -37,7 +43,6 @@ int lcount = 0;      //-ANOTHER COUNTING VAR
 // color palette related stuff
 CRGBPalette16 currentPalette;
 TBlendType    currentBlending;
-
 extern CRGBPalette16 myRedWhiteBluePalette;
 extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
 
@@ -47,7 +52,7 @@ void setup()
 {
   delay(1000);
             
-  LEDS.addLeds<WS2811_PORTDC,16>(*leds, ledCount);
+  LEDS.addLeds<WS2811_PORTDC,16>(*realLeds, realLedCount);
   LEDS.setBrightness(128);
         
   currentPalette = RainbowColors_p;
@@ -57,7 +62,45 @@ void setup()
   Serial.println(F("https://github.com/zekekoch/QueenFX"));
   fillSolid(0,0,0); //-BLANK STRIP
     
-  LEDS.show();
+    showLeds();
+}
+
+void showLeds()
+{
+    // there are 13 phyical strips, but the first three are all on one logical strip
+    for (byte iStrip = 0;iStrip < numStrips;iStrip++)
+    {
+        switch(iStrip)
+        {
+            case 0:
+                for(byte iLed = 0;iLed < stripLengths[iStrip];iLed++)
+                {
+                    realLeds[0][iLed+155] = leds[0][iLed];
+                }                
+                break;
+            case 1: 
+                // this one is backwards
+                for(byte iLed = 0;iLed < stripLengths[iStrip];iLed++)
+                {
+                    realLeds[0][154-iLed] = leds[1][iLed];
+                }                
+                break;
+            case 2:
+                for(byte iLed = 0;iLed < 84;iLed++)
+                {
+                    realLeds[0][iLed] = leds[2][iLed];
+                }                
+                break;
+            default:
+                for(byte iLed = 0;iLed < ledCount;iLed++)
+                {
+                    realLeds[iStrip - 2][iLed] = leds[iStrip][iLed];
+                }
+            break;
+        }
+    }
+    LEDS.show();
+
 }
 
 void colorPaletteLoop()
@@ -69,7 +112,7 @@ void colorPaletteLoop()
     
     FillLEDsFromPaletteColors( startIndex, 3);
     
-    FastLED.show();
+    showLeds();
     FastLED.delay(1000 / UPDATES_PER_SECOND);
 }
 
@@ -77,7 +120,7 @@ void FillLEDsFromPaletteColors( uint8_t colorIndex, uint8_t width)
 {
     uint8_t brightness = 255;
     
-    for(int iStrip = 0;iStrip < NUM_STRIPS;iStrip++)
+    for(int iStrip = 0;iStrip < numStrips;iStrip++)
     {
         for( int iLed = 0; iLed < ledCount;iLed++) 
         {
@@ -191,7 +234,7 @@ void setPixel(int adex, int cred, int cgrn, int cblu) {
     if (adex < 0 || adex > ledCount-1)
         return;
 
-    for(int i = 0;i<NUM_STRIPS;i++)
+    for(int i = 0;i<numStrips;i++)
     {
         leds[i][adex] = CRGB(cred, cgrn, cblu);
     }
@@ -201,7 +244,7 @@ void setPixel(int adex, CRGB c) {
     if (adex < 0 || adex > ledCount-1)
         return;
 
-    for(int i = 0;i<NUM_STRIPS;i++)
+    for(int i = 0;i<numStrips;i++)
     {
         leds[i][adex] = c;
     }
@@ -336,7 +379,7 @@ void fillSolid(byte strand, const CRGB& color)
 
 void fillSolid(CRGB color)
 {
-    for(int i = 0;i<NUM_STRIPS;i++)
+    for(int i = 0;i<numStrips;i++)
         fillSolid(i, color);
 }
 
@@ -347,7 +390,7 @@ void fillSolid(int cred, int cgrn, int cblu) { //-SET ALL LEDS TO ONE COLOR
 void rotatingRainbow()
 {
     static byte hue = 0;
-    for(int i = 0;i < NUM_STRIPS;i++)
+    for(int i = 0;i < numStrips;i++)
     {
         fill_rainbow(leds[i], ledCount, hue++, 10);
     }
@@ -972,19 +1015,22 @@ void loop() {
     mux.print();
   }
 
-  fillSolid(CHSV(mux.getCutOff(), 255, 255));
+  //fillSolid(CHSV(mux.getCutOff(), 255, 255));
+  // rotatingRainbow();
+    Fire2012WithPalette(); // run simulation frame, using palette colors
 
   // Set the first n leds on each strip to show which strip it is
-  for(int i = 0; i < NUM_STRIPS; i++) {
-    for(int j = 0; j <= i; j++) {
-      leds[i][j] = CRGB::Red;
+  for(int i = 0; i < numStrips; i++) {
+    for(int j = 0; j <= i+1; j++) {
+      leds[i][j] = CRGB::Green;
     }
   }
 
-  for(int i = 0;i< NUM_STRIPS;i++)
+  for(int i = 0;i< numStrips;i++)
   {
-    leds[i][ledCount-1] = CRGB::Blue;
-    leds[i][ledCount/2-1] = CRGB::White;
+    // make the last one blue
+    leds[i][stripLengths[i]-1] = CRGB::Blue;
+    leds[i][stripLengths[i]/2-1] = CRGB::White;
     for(int l = 0;l<ledCount;l++)
     {
       if (l % 10 == 0)
@@ -992,12 +1038,14 @@ void loop() {
     }
   }
 
+  for(byte s = 0;s < numStrips;s++)
+    leds[s][0] = CRGB::Yellow;
 
-//    Fire2012WithPalette(); // run simulation frame, using palette colors
+
 
     //police_lightsALL();
 
-    LEDS.show();
+    showLeds();
     FastLED.delay(1000/UPDATES_PER_SECOND);
     return;
 
@@ -1051,7 +1099,7 @@ void loop() {
     if (ledMode == 105) {fillSolid(0,255,255);}  //---105- STRIP SOLID TEAL?
     if (ledMode == 106) {fillSolid(255,0,255);}  //---106- STRIP SOLID VIOLET?
     
-    LEDS.show();
+    showLeds();
     FastLED.delay(1000 / UPDATES_PER_SECOND);
 }
 
@@ -1084,11 +1132,12 @@ void loop() {
 
 void Fire2012WithPalette()
 {
+    byte height = ledCount;
 
     // COOLING: How much does the air cool as it rises?
     // Less cooling = taller flames.  More cooling = shorter flames.
     // Default 55, suggested range 20-100 
-    const byte COOLING = 55;
+    const byte COOLING = mux.getCutOff();
 
 
     // SPARKING: What chance (out of 255) is there that a new spark will be lit?
@@ -1097,17 +1146,17 @@ void Fire2012WithPalette()
     const byte SPARKING = 120;
 
     // Array of temperature readings at each simulation cell
-    static byte heat[ledCount];
+    static byte heat[ledCount / 2];
 
 
   // Step 1.  Cool down every cell a little
-    for (int i = 0; i < (ledCount); i++) 
+    for (int i = 0; i < (height); i++) 
     {
-      heat[i] = qsub8(heat[i], random8(0, ((COOLING * 10) / (ledCount) + 2)));
+      heat[i] = qsub8(heat[i], random8(0, ((COOLING * 10) / (height) + 2)));
     }
   
     // Step 2.  Heat from each cell drifts 'up' and diffuses a little
-    for(int k = (ledCount) - 1; k >= 2; k--) {
+    for(int k = (height) - 1; k >= 2; k--) {
       heat[k] = (heat[k - 1] + heat[k - 2] + heat[k - 2] ) / 3;
     }
     
@@ -1118,12 +1167,12 @@ void Fire2012WithPalette()
     }
 
     // Step 4.  Map from heat cells to LED colors
-    for( int j = 0; j < (ledCount); j++) {
+    for( int j = 0; j < (height); j++) {
       // Scale the heat value from 0-255 down to 0-240
       // for best results with color palettes.
       byte colorindex = scale8( heat[j], 240);
 
-      for(byte iStrip = 0;iStrip<NUM_STRIPS;iStrip++)
+      for(byte iStrip = 0;iStrip<numStrips;iStrip++)
           leds[iStrip][j] = ColorFromPalette( currentPalette, colorindex);
     }
 }
