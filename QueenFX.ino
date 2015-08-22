@@ -22,6 +22,7 @@ int EVENODD = ledCount%2;
 
 CRGB realLeds[numStrips][realLedCount];
 CRGB leds[numStrips][ledCount];
+
 CRGB ledsX[ledCount]; //-ARRAY FOR COPYING WHATS IN THE LED STRIP CURRENTLY (FOR CELL-AUTOMATA, ETC)
 const byte ledCounts[] = { };
 
@@ -65,6 +66,19 @@ void setup()
     showLeds();
 }
 
+// roughly map leds dealing with the fact that
+// I want to stay integer math, but need fractions
+// this is sloppy, but close enough for now
+int mapLed(int led, int from, int to)
+{
+    if (from == to)
+        return led;
+    else
+        return led * ((from * 1024)/to) / (1024); 
+}
+// the front of the car has shorter lights
+//const byte stripLengths[14] = {36, 70, 84, 102, 115, 126, 139, 139, 139, 139, 139, 139, 139, 139} ;
+
 void showLeds()
 {
     // there are 13 phyical strips, but the first three are all on one logical strip
@@ -75,26 +89,26 @@ void showLeds()
             case 0:
                 for(byte iLed = 0;iLed < stripLengths[iStrip];iLed++)
                 {
-                    realLeds[0][iLed+155] = leds[0][iLed];
+                    realLeds[0][iLed+155] = leds[iStrip][mapLed(iLed, ledCount, stripLengths[iStrip])];
                 }                
                 break;
             case 1: 
                 // this one is backwards
                 for(byte iLed = 0;iLed < stripLengths[iStrip];iLed++)
                 {
-                    realLeds[0][154-iLed] = leds[1][iLed];
+                    realLeds[0][154-iLed] = leds[iStrip][mapLed(iLed, ledCount, stripLengths[iStrip])];
                 }                
                 break;
             case 2:
                 for(byte iLed = 0;iLed < 84;iLed++)
                 {
-                    realLeds[0][iLed] = leds[2][iLed];
+                    realLeds[0][iLed] = leds[iStrip][mapLed(iLed, ledCount, stripLengths[iStrip])];
                 }                
                 break;
             default:
                 for(byte iLed = 0;iLed < ledCount;iLed++)
                 {
-                    realLeds[iStrip - 2][iLed] = leds[iStrip][iLed];
+                    realLeds[iStrip - 2][iLed] = leds[iStrip][mapLed(iLed, ledCount, stripLengths[iStrip])];
                 }
             break;
         }
@@ -371,6 +385,14 @@ void print_led_arrays(int ilen){
 
 //------------------------LED EFFECT FUNCTIONS------------------------
 
+void addGlitter( fract8 chanceOfGlitter) 
+{
+  if( random8() < chanceOfGlitter) {
+    leds[random8(14)][ random16(ledCount) ] += CRGB::White;
+  }
+}
+
+
 void fillSolid(byte strand, const CRGB& color)
 {
     // fill_solid -   fill a range of LEDs with a solid color
@@ -393,10 +415,40 @@ void rotatingRainbow()
     for(int i = 0;i < numStrips;i++)
     {
         fill_rainbow(leds[i], ledCount, hue++, 10);
+        //if(mux.getDynamicIntensifier())  
+            addGlitter(255);
+    }
+}
+
+void juggle() 
+{
+  // eight colored dots, weaving in and out of sync with each other
+    for(byte iStrip =0;iStrip < numStrips;iStrip++)
+    {
+        fadeToBlackBy( leds[iStrip], ledCount, 20);
+    }
+    
+    byte dothue = 0;
+    for( int i = 0; i < 8; i++) {
+        leds[beatsin16(i+7,0,numStrips)][beatsin16(i+7,0,ledCount)] |= CHSV(dothue, 200, 255);
+    dothue += 32;
     }
 }
 
 
+
+void sinelon()
+{
+    static byte gHue;
+  // a colored dot sweeping back and forth, with fading trails
+    for(byte i = 0;i<numStrips;i++)
+    {
+
+        fadeToBlackBy( leds[i], ledCount, 20);
+        int ypos = beatsin16(13,0,ledCount);
+        leds[i][ypos] += CHSV( gHue, 255, 192);
+    }
+}
 
 void rainbow_fade() { //-FADE ALL LEDS THROUGH HSV RAINBOW
     ihue++;
@@ -1016,8 +1068,10 @@ void loop() {
   }
 
   //fillSolid(CHSV(mux.getCutOff(), 255, 255));
-  // rotatingRainbow();
-    Fire2012WithPalette(); // run simulation frame, using palette colors
+  //sinelon();
+  //juggle();
+  rotatingRainbow();
+  //`Fire2012WithPalette(); // run simulation frame, using palette colors
 
   // Set the first n leds on each strip to show which strip it is
   for(int i = 0; i < numStrips; i++) {
@@ -1025,12 +1079,12 @@ void loop() {
       leds[i][j] = CRGB::Green;
     }
   }
-
+/*
   for(int i = 0;i< numStrips;i++)
   {
     // make the last one blue
-    leds[i][stripLengths[i]-1] = CRGB::Blue;
-    leds[i][stripLengths[i]/2-1] = CRGB::White;
+    leds[i][ledCount-1] = CRGB::Blue;
+    leds[i][ledCount/2] = CRGB::White;
     for(int l = 0;l<ledCount;l++)
     {
       if (l % 10 == 0)
@@ -1040,7 +1094,7 @@ void loop() {
 
   for(byte s = 0;s < numStrips;s++)
     leds[s][0] = CRGB::Yellow;
-
+*/
 
 
     //police_lightsALL();
@@ -1146,7 +1200,7 @@ void Fire2012WithPalette()
     const byte SPARKING = 120;
 
     // Array of temperature readings at each simulation cell
-    static byte heat[ledCount / 2];
+    static byte heat[ledCount];
 
 
   // Step 1.  Cool down every cell a little
