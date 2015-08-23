@@ -54,9 +54,9 @@ void setup()
   delay(1000);
             
   LEDS.addLeds<WS2811_PORTDC,16>(*realLeds, realLedCount);
-  LEDS.setBrightness(128);
+  LEDS.setBrightness(255);
         
-  currentPalette = RainbowColors_p;
+  currentPalette = HeatColors_p;
   currentBlending = LINEARBLEND;
 
   Serial.begin(57600);
@@ -415,24 +415,62 @@ void rotatingRainbow()
     for(int i = 0;i < numStrips;i++)
     {
         fill_rainbow(leds[i], ledCount, hue++, 10);
-        //if(mux.getDynamicIntensifier())  
+        if(mux.isIntensifierOn())  
             addGlitter(255);
     }
 }
+
+void spiralRainbow()
+{
+    static byte hue = 0;
+    static CHSV hsv = CHSV(0,255,255);
+    static unsigned long lastTime = millis();
+    static byte iStrip = 0;
+
+    if (millis() < lastTime + 1)
+    {
+        return;
+    }
+
+    iStrip++;
+    if (iStrip == numStrips)
+        iStrip = 0;
+
+    Serial.println(iStrip);
+
+    hsv.hue += 1;
+
+    for(int i = 0; i < numStrips;i++)
+    {
+        fadeToBlackBy(leds[i], ledCount, 30);
+    }
+
+    for( int iLed = 0; iLed < ledCount; iLed++) 
+    {
+        leds[iStrip][iLed] = hsv;
+    }
+
+
+
+    lastTime = millis();
+}
+
 
 void juggle() 
 {
   // eight colored dots, weaving in and out of sync with each other
     for(byte iStrip =0;iStrip < numStrips;iStrip++)
     {
-        fadeToBlackBy( leds[iStrip], ledCount, 20);
+        fadeToBlackBy( leds[iStrip], ledCount/2, 20);
     }
     
     byte dothue = 0;
-    for( int i = 0; i < 8; i++) {
-        leds[beatsin16(i+7,0,numStrips)][beatsin16(i+7,0,ledCount)] |= CHSV(dothue, 200, 255);
+    for( int i = 0; i < 16; i++) {
+        leds[beatsin16(i*2,0,numStrips)][beatsin16(i*2,0,ledCount)] |= CHSV(dothue, 200, 255);
     dothue += 32;
     }
+    mirror();
+
 }
 
 
@@ -1067,18 +1105,32 @@ void loop() {
     mux.print();
   }
 
-  //fillSolid(CHSV(mux.getCutOff(), 255, 255));
-  //sinelon();
-  //juggle();
-  rotatingRainbow();
-  //`Fire2012WithPalette(); // run simulation frame, using palette colors
-
-  // Set the first n leds on each strip to show which strip it is
-  for(int i = 0; i < numStrips; i++) {
-    for(int j = 0; j <= i+1; j++) {
-      leds[i][j] = CRGB::Green;
-    }
+  switch(mux.getDial())
+  {
+    case CMux::dialCont:
+      rotatingRainbow();
+      break;
+    case CMux::dialEmission:
+      juggle();
+      break;
+    case CMux::dialLow:
+      Fire2012WithPalette();
+      break;
+    case CMux::dialMedium:
+      spiralRainbow();
+      break;
+    case CMux::dialHigh:
+      sin_bright_wave(240, 35);
+      break;
   }
+
+  // test light order
+  // Set the first n leds on each strip to show which strip it is
+  //for(int i = 0; i < numStrips; i++) {
+  //  for(int j = 0; j <= i+1; j++) {
+  //    leds[i][j] = CRGB::Green;
+  /// }
+  //}
 /*
   for(int i = 0;i< numStrips;i++)
   {
@@ -1186,7 +1238,7 @@ void loop() {
 
 void Fire2012WithPalette()
 {
-    byte height = ledCount;
+    byte height = ledCount / 2;
 
     // COOLING: How much does the air cool as it rises?
     // Less cooling = taller flames.  More cooling = shorter flames.
@@ -1229,6 +1281,18 @@ void Fire2012WithPalette()
       for(byte iStrip = 0;iStrip<numStrips;iStrip++)
           leds[iStrip][j] = ColorFromPalette( currentPalette, colorindex);
     }
+    
+    mirror();
+}
+
+// mirrors the array of leds (nice for the fire since I want it to be symmetrical
+void mirror()
+{
+  for(byte col = 0;col < numStrips;col++)
+  {
+    for(byte row = 0;row < ledCount/2;row++)
+      leds[col][ledCount - row -1] = leds[col][row];  
+  }
 }
 
 /*
