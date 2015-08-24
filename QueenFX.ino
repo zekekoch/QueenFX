@@ -20,8 +20,13 @@ int FIRST_THIRD = int(ledCount/3);
 int SECOND_THIRD = FIRST_THIRD * 2;
 int EVENODD = ledCount%2;
 
+byte cushionLeft = 13;
+byte cushionRight = 14;
+byte tailLights = 12;
+
 CRGB realLeds[numStrips][realLedCount];
 CRGB leds[numStrips][ledCount];
+CRGB ledBuffer[numStrips][ledCount];
 
 CRGB ledsX[ledCount]; //-ARRAY FOR COPYING WHATS IN THE LED STRIP CURRENTLY (FOR CELL-AUTOMATA, ETC)
 const byte ledCounts[] = { };
@@ -47,6 +52,39 @@ TBlendType    currentBlending;
 extern CRGBPalette16 myRedWhiteBluePalette;
 extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
 
+// The 16 bit version of our coordinates
+static uint16_t noiseX;
+static uint16_t noiseY;
+static uint16_t noiseZ;
+
+// We're using the x/y dimensions to map to the x/y pixels on the matrix.  We'll
+// use the z-axis for "time".  speed determines how fast time moves forward.  Try
+// 1 for a very slow moving effect, or 60 for something that ends up looking like
+// water.
+uint16_t speed = 20; // speed is set dynamically once we've started up
+
+// Scale determines how far apart the pixels in our noise matrix are.  Try
+// changing these values around to see how it affects the motion of the display.  The
+// higher the value of scale, the more "zoomed out" the noise iwll be.  A value
+// of 1 will be so zoomed in, you'll mostly see solid colors.
+uint16_t scale = 30; // scale is set dynamically once we've started up
+
+// This is the array that we keep our computed noise values in
+const byte noiseScale = 5;
+const byte noiseWidth = (ledCount / noiseScale)+1;
+uint8_t noise[noiseWidth][noiseWidth];
+
+uint8_t colorLoop = 1;
+
+//
+// Mark's xy coordinate mapping code.  See the XYMatrix for more information on it.
+//
+uint16_t XY( uint8_t x, uint8_t y)
+{
+  uint16_t i;
+  i = (y * numStrips) + x;
+  return i;
+}
 
 //------------------SETUP------------------
 void setup()
@@ -63,7 +101,7 @@ void setup()
   Serial.println(F("https://github.com/zekekoch/QueenFX"));
   fillSolid(0,0,0); //-BLANK STRIP
     
-    showLeds();
+  showLeds();
 }
 
 // roughly map leds dealing with the fact that
@@ -361,6 +399,18 @@ void copy_led_array(){
     }
 }
 
+void fillBuffer()
+{
+    for(int iStrip = 0; iStrip < numStrips; iStrip++ ) 
+    {
+        for(int iLed = 0; iLed < ledCount;iLed++)
+        {
+            ledBuffer[iStrip][iLed] = leds[iStrip][iLed];
+        }
+    }
+}
+
+
 // todo: make this work with multiple arrays
 void print_led_arrays(int ilen){
     copy_led_array();
@@ -407,6 +457,78 @@ void fillSolid(CRGB color)
 
 void fillSolid(int cred, int cgrn, int cblu) { //-SET ALL LEDS TO ONE COLOR
     fillSolid(0, CRGB(cred, cgrn, cblu));    
+}
+
+void explosion()
+{
+    static byte counter = 0;
+    counter++; 
+
+    //    leds[random8(numStrips)][random8(ledCount)] = CHSV(0,255,255);
+    leds[random8(numStrips)][random8(ledCount)] = CRGB(255,0,0);
+//    leds[5][5] = CRGB(255,0,0);
+
+    fillBuffer();
+
+//    blur2d(*leds, numStrips, ledCount, 64);
+
+    for(byte iStrip = 1;iStrip < numStrips-1;iStrip++)
+    {
+        for(byte iLed = 1; iLed < ledCount-1;iLed++)
+        {
+
+            if (ledBuffer[iStrip][iLed].red > 200)
+            {            
+                ledBuffer[iStrip][iLed].red = 0;
+                //printLed(iStrip, iLed);
+            }
+
+            byte count = 0;
+            if (ledBuffer[iStrip-1][iLed].red > 200)
+            {
+                count++;
+            } 
+            if (ledBuffer[iStrip-1][iLed-1].red > 200)
+            {
+                count++;
+            }
+            if (ledBuffer[iStrip][iLed-1].red > 200)
+                count++;
+
+            /*
+            if (ledBuffer[iStrip+1][iLed-1].red > 200)
+                count++;
+            if (ledBuffer[iStrip+1][iLed].red > 200)
+                count++;
+            if (ledBuffer[iStrip+1][iLed+1].red > 200)
+                count++;
+            if (ledBuffer[iStrip][iLed+1].red > 200)
+                count++;
+            if (ledBuffer[iStrip-1][iLed+1].red > 200)
+                count++;
+            */
+            if (count > 0)
+            {
+                Serial.print("*");
+                printLed(iStrip, iLed);
+                leds[iStrip][iLed] = CRGB(255, 0, 0);
+            }
+        }
+        Serial.println();
+    }
+    //for(int i = 0;i<numStrips;i++)
+    //    fadeToBlackBy(leds[i], ledCount, 30);
+}
+
+void printLed(byte s, byte l)
+{
+    Serial.print("[");
+    Serial.print(s);
+    Serial.print(".");
+    Serial.print(l);
+    Serial.print(".");
+    Serial.print(ledBuffer[s][l]);
+    Serial.print("]");
 }
 
 void rotatingRainbow()
@@ -461,12 +583,12 @@ void juggle()
   // eight colored dots, weaving in and out of sync with each other
     for(byte iStrip =0;iStrip < numStrips;iStrip++)
     {
-        fadeToBlackBy( leds[iStrip], ledCount/2, 20);
+        fadeToBlackBy( leds[iStrip], ledCount, 20);
     }
     
     byte dothue = 0;
-    for( int i = 0; i < 16; i++) {
-        leds[beatsin16(i*2,0,numStrips)][beatsin16(i*2,0,ledCount)] |= CHSV(dothue, 200, 255);
+    for( int i = 0; i < numStrips; i++) {
+        leds[i][beatsin16(i+7,0,ledCount/2)] |= CHSV(dothue, 200, 255);
     dothue += 32;
     }
     mirror();
@@ -1105,15 +1227,31 @@ void loop() {
     mux.print();
   }
 
+
   switch(mux.getDial())
   {
     case CMux::dialCont:
+    //  explosion();
       rotatingRainbow();
       break;
     case CMux::dialEmission:
-      juggle();
+      // Periodically choose a new palette, speed, and scale
+      ChangePaletteAndSettingsPeriodically();
+
+      // generate noise data
+      fillnoise8();
+      
+      // convert the noise data to colors in the LED array
+      // using the current palette
+      mapNoiseToLEDsUsingPalette();
+      //mirror();
       break;
     case CMux::dialLow:
+      if (mux.isLifeTestOn())
+        currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
+
+      else
+        currentPalette = HeatColors_p;
       Fire2012WithPalette();
       break;
     case CMux::dialMedium:
@@ -1124,13 +1262,27 @@ void loop() {
       break;
   }
 
-  // test light order
-  // Set the first n leds on each strip to show which strip it is
-  //for(int i = 0; i < numStrips; i++) {
-  //  for(int j = 0; j <= i+1; j++) {
-  //    leds[i][j] = CRGB::Green;
-  /// }
-  //}
+
+  static bool isSmile = false;
+  static byte smileCount = 0;
+  if(random16(5000) == 0)
+    isSmile = true;
+
+  if (isSmile == true)
+  {
+        smileCount++;
+        if (smileCount == 10)
+            isSmile = false;
+
+        smile();
+  }
+  else
+  {
+    pulseJets();
+  }
+
+  cushions();
+
 /*
   for(int i = 0;i< numStrips;i++)
   {
@@ -1196,15 +1348,7 @@ void loop() {
     //if (ledMode == 25) {musicReactiveFade(mux.getCutOff());}
     if (ledMode == 26) {fourthOfJuly();}
     if (ledMode == 28) {yxyy();}
-    
-    
-    if (ledMode == 101) {fillSolid(255,0,0);}    //---101- STRIP SOLID RED
-    if (ledMode == 102) {fillSolid(0,255,0);}    //---102- STRIP SOLID GREEN
-    if (ledMode == 103) {fillSolid(0,0,255);}    //---103- STRIP SOLID BLUE
-    if (ledMode == 104) {fillSolid(255,255,0);}  //---104- STRIP SOLID YELLOW
-    if (ledMode == 105) {fillSolid(0,255,255);}  //---105- STRIP SOLID TEAL?
-    if (ledMode == 106) {fillSolid(255,0,255);}  //---106- STRIP SOLID VIOLET?
-    
+        
     showLeds();
     FastLED.delay(1000 / UPDATES_PER_SECOND);
 }
@@ -1238,6 +1382,7 @@ void loop() {
 
 void Fire2012WithPalette()
 {
+    fillSolid(CRGB::Black);
     byte height = ledCount / 2;
 
     // COOLING: How much does the air cool as it rises?
@@ -1312,6 +1457,267 @@ void soundMachine(CRGB color, byte eq[7]){
     high > 200 ? fillSolid(6, highlightColor) : fillSolid(6, baseColor);
 }
 */
+
+// Fill the x/y array of 8-bit noise values using the inoise8 function.
+void fillnoise8() {
+  // If we're runing at a low "speed", some 8-bit artifacts become visible
+  // from frame-to-frame.  In order to reduce this, we can do some fast data-smoothing.
+  // The amount of data smoothing we're doing depends on "speed".
+  uint8_t dataSmoothing = 0;
+  if( speed < 50) {
+    dataSmoothing = 200 - (speed * 4);
+  }
+  
+  for(int i = 0; i < noiseWidth; i++) {
+    int ioffset = scale * i;
+    for(int j = 0; j < noiseWidth; j++) {
+      int joffset = scale * j;
+      
+      uint8_t data = inoise8(noiseX + ioffset,noiseY + joffset,noiseZ);
+
+      // The range of the inoise8 function is roughly 16-238.
+      // These two operations expand those values out to roughly 0..255
+      // You can comment them out if you want the raw noise data.
+      data = qsub8(data,16);
+      data = qadd8(data,scale8(data,39));
+
+      if( dataSmoothing ) {
+        uint8_t olddata = noise[i][j];
+        uint8_t newdata = scale8( olddata, dataSmoothing) + scale8( data, 256 - dataSmoothing);
+        data = newdata;
+      }
+      
+      noise[i][j] = data;
+    }
+  }
+  
+  noiseZ += speed;
+  
+  // apply slow drift to X and Y, just for visual variation.
+  noiseX += speed / 8;
+  noiseY -= speed / 16;
+}
+
+void mapNoiseToLEDsUsingPalette()
+{
+  static uint8_t ihue=0;
+  
+  for(int i = 0; i < noiseWidth; i++) {
+    for(int j = 0; j < noiseWidth; j++) {
+      // We use the value at the (i,j) coordinate in the noise
+      // array for our brightness, and the flipped value from (j,i)
+      // for our pixel's index into the color palette.
+
+      uint8_t index = noise[j][i];
+      uint8_t bri =   noise[i][j];
+
+      // if this palette is a 'loop', add a slowly-changing base value
+      if( colorLoop) { 
+        index += ihue;
+      }
+
+      // brighten up, as the color palette itself often contains the 
+      // light/dark dynamic range desired
+      if( bri > 127 ) {
+        bri = 255;
+      } else {
+        bri = dim8_raw( bri * 2);
+      }
+
+      CRGB color = ColorFromPalette( currentPalette, index, bri);
+
+      Serial.println();
+      for(int k = 0;k<noiseScale;k++)
+      {
+        Serial.print("[");
+        Serial.print(j);        
+        Serial.print(".");
+        Serial.print(k);
+        Serial.print("]=");
+        Serial.print(j*noiseScale+k);
+
+        if((j*2+k) > ledCount -2)
+            break;
+        leds[i][j*noiseScale+k] = color;
+      }
+      Serial.println();
+    }
+  }
+  
+  ihue+=1;
+}
+void ChangePaletteAndSettingsPeriodically()
+{
+  uint8_t secondHand = ((millis() / 1000)) % 60;
+  static uint8_t lastSecond = 99;
+  
+  if( lastSecond != secondHand) {
+    lastSecond = secondHand;
+    if( secondHand ==  0)  { currentPalette = RainbowColors_p;         speed = 20; scale = 30; colorLoop = 1; }
+    if( secondHand ==  5)  { SetupPurpleAndGreenPalette();             speed = 10; scale = 50; colorLoop = 1; }
+    if( secondHand == 10)  { SetupBlackAndWhiteStripedPalette();       speed = 20; scale = 30; colorLoop = 1; }
+    if( secondHand == 15)  { currentPalette = ForestColors_p;          speed =  8; scale =120; colorLoop = 0; }
+    if( secondHand == 20)  { currentPalette = CloudColors_p;           speed =  4; scale = 30; colorLoop = 0; }
+    if( secondHand == 25)  { currentPalette = LavaColors_p;            speed =  8; scale = 50; colorLoop = 0; }
+    if( secondHand == 30)  { currentPalette = OceanColors_p;           speed = 20; scale = 90; colorLoop = 0; }
+    if( secondHand == 35)  { currentPalette = PartyColors_p;           speed = 20; scale = 30; colorLoop = 1; }
+    if( secondHand == 55)  { currentPalette = RainbowStripeColors_p;   speed = 30; scale = 20; colorLoop = 1; }
+  }
+}
+
+CRGB getFlameColor()
+{
+    //tail lights are GRB, other lights arte RGB
+    byte offset = 48;
+
+    offset = mux.getCutOff();
+    Serial.println(offset);
+  byte seed = random(0+offset,50+offset);
+  if (seed <30+offset)
+    ;
+
+  else if (seed < 45+offset)
+    seed = seed - 30+offset;
+  else 
+    seed = 160 + seed + offset;
+
+    return CHSV(seed, 255, 255);
+}
+
+CRGB getFlameColorFromPalette()
+{
+    const CRGBPalette16 reverseFlames =
+    {
+        0x00FF00,
+        0x00FF00,
+        0x00FF00,
+        0x00FF00,
+
+        0x88FF00,
+        0x88FF00,
+        0x88FF00,
+        0x88FF00,
+
+        0xAAFF00,
+        0xAAFF00,
+        0xAAFF00,
+        0xAAFF00,
+
+        0x008800,
+        0x008800,
+        0x008800,
+        0x008800
+    };
+
+    const CRGBPalette16 coldFlames =
+    {
+        0x00FF,
+        0x00FF,
+        0x00FF,
+        0x00FF,
+
+        0x8800FF,
+        0x8800FF,
+        0x8800FF,
+        0x8800FF,
+
+        0xAA00FF,
+        0xAA00FF,
+        0xAA00FF,
+        0xAA00FF,
+
+        0x000088,
+        0x000088,
+        0x000088,
+        0x000088
+    };
+
+    if (mux.isLifeTestOn())
+        return ColorFromPalette(coldFlames, random8(), 128, LINEARBLEND);
+    else
+        return ColorFromPalette(reverseFlames, random8(), 128, LINEARBLEND);
+
+}
+
+void pulseJets()
+{
+  for (int i = 0;i<50;i++)
+  {
+    realLeds[tailLights][i] = getFlameColorFromPalette();
+
+    //leds[tailLights][i] += CRGB(redShift,0,0);
+    //leds[tailLights][99-i]+= CRGB(redShift,0,0);
+  }
+}
+
+void opulseJets()
+{
+  static bool increment = true;
+  static byte hue = 0;
+
+  for (int i = 0;i<50;i++)
+  {
+    realLeds[tailLights][i] = getFlameColorFromPalette();
+    realLeds[tailLights][99-i] = getFlameColorFromPalette();
+
+    //leds[tailLights][i] += CRGB(redShift,0,0);
+    //leds[tailLights][99-i]+= CRGB(redShift,0,0);
+  }
+}
+
+void smile()
+{
+  fill_solid(realLeds[tailLights], ledCount, CRGB::Black);
+  //for (int i = 0; i<32;i++)
+  //  leds[tailLights][i] = CRGB::Red;
+
+  for (int i = 36; i<43;i++)
+    realLeds[tailLights][i] = CRGB::Red;
+
+  realLeds[tailLights][44] = CRGB::Blue;
+  realLeds[tailLights][34] = CRGB::Blue;
+
+  realLeds[tailLights][49] = CRGB::Purple;
+}
+
+void bigSmile()
+{
+  fill_solid(realLeds[tailLights], ledCount, CRGB::Black);
+
+  for (int i = 8; i<23;i++)
+    realLeds[tailLights][i] = CRGB::Red;
+
+  realLeds[tailLights][3] = CRGB::Blue;
+  realLeds[tailLights][27] = CRGB::Blue;
+
+  realLeds[tailLights][49] = CRGB::HotPink;
+
+}
+
+void cushions()
+{
+  static byte phase = 0;
+  const byte cushionLeds = 21;
+
+  for (int column = 0;column<6;column++)
+  {
+    phase += 3;
+    for (int row = 0;row < cushionLeds; row++)
+    {
+      if (phase % 3)
+      {
+        realLeds[cushionLeft][cushionLeds*column + row] = CRGB::Blue;
+        realLeds[cushionLeft][cushionLeds*column + row] += CRGB(row*20,0,0);
+      }
+      else
+      {
+        realLeds[cushionLeft][cushionLeds*column + row] = CRGB::Red;
+        realLeds[cushionLeft][cushionLeds*column + row] += CRGB(0,0,row*20);
+      }
+    }
+  }
+//  fill_solid(leds[cushionRight], 126, row % 2 ? CRGB::Blue : CRGB::Red);
+}
 
 
 // GETS CALLED BY SERIALCOMMAND WHEN NO MATCHING COMMAND
