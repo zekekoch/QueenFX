@@ -556,9 +556,7 @@ void spiralRainbow()
     if (iStrip == numStrips)
         iStrip = 0;
 
-    Serial.println(iStrip);
-
-    hsv.hue += 1;
+    hsv.hue += (mux.getCutOff() / 16) + 1;
 
     for(int i = 0; i < numStrips;i++)
     {
@@ -1178,40 +1176,6 @@ boolean checkButton(byte whichButton)
     return false;
 }
 
-void onSelectorChange(byte dialState)
-{
-    switch(dialState)
-    {
-        case 0:
-            //---STRIP RAINBOW FADE
-            rainbow_fade();
-            break;
-        case 1:
-            //---RAINBOW LOOP
-            rainbow_loop(10, 20);         
-        break;
-        case 2:
-            //--- VERITCAL RAINBOW
-            rainbow_vertical(7, 20);
-            break;
-        case 3:
-            rotatingRainbow();
-            break;
-        case 4:
-            if (mux.getEmission())
-                //---POLICE SINGLE
-                police_lightsONE();
-            else
-                //---POLICE SOLID
-                police_lightsALL();
-        break;
-        case 5:
-        break;
-
-    }
-
-}
-
 //------------------MAIN LOOP------------------
 void loop() {
   // Add entropy to random number generator; we use a lot of it.
@@ -1225,6 +1189,15 @@ void loop() {
     mux.print();
   }
 
+  if (mux.isEmissionOn())
+  {
+    LEDS.setBrightness(32);
+  } 
+  else
+  {
+    LEDS.setBrightness(128);
+  }
+
 
   switch(mux.getDial())
   {
@@ -1234,7 +1207,18 @@ void loop() {
       break;
     case CMux::dialEmission:
       // Periodically choose a new palette, speed, and scale
-      ChangePaletteAndSettingsPeriodically();
+        static bool lastTest = false;
+        static bool lt = false;
+        lt = mux.getLifeTest();
+
+        if (lt != lastTest)
+        {
+            if (lt) 
+            {
+              ChangePaletteAndSettingsPeriodically();                
+            }
+          lastTest = mux.getLifeTest();            
+        }
 
       // generate noise data
       fillnoise8();
@@ -1245,27 +1229,53 @@ void loop() {
       //mirror();
       break;
     case CMux::dialLow:
-      if (mux.isLifeTestOn())
-        currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
-      else if (mux.isEmissionOn())
+
+      if (mux.isIntensifierOn())
+      {
         currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Purple, CRGB::Fuchsia,  CRGB::Red);
+      }
+      else if (mux.isLifeTestOn())
+      {
+        currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
+      }
+
       else
+      {
         currentPalette = HeatColors_p;
+      }
       Fire2012WithPalette();
       break;
     case CMux::dialMedium:
       spiralRainbow();
       break;
     case CMux::dialHigh:
-      sin_bright_wave(240, 35);
+        if (mux.isLifeTestOn())
+            police_lightsALL();
+        else
+          sin_bright_wave(mux.getCutOff(), 35);
       break;
   }
 
 
+  pulseJets();
+  cushions();
+
+
+  //debugColors();
+
+    showLeds();
+    FastLED.delay(1000/UPDATES_PER_SECOND);
+}
+
+void flashSmile()
+{
   static bool isSmile = false;
   static byte smileCount = 0;
   if(random16(5000) == 0)
+  {    
     isSmile = true;
+    smileCount = 0;
+  }
 
   if (isSmile == true)
   {
@@ -1280,8 +1290,11 @@ void loop() {
     pulseJets();
   }
 
-  cushions();
 
+}
+
+void debugColors()
+{
 
   for(int i = 0;i< numStrips;i++)
   {
@@ -1304,12 +1317,6 @@ void loop() {
         leds[s][h] = CRGB::Green;
   }
 
-
-
-    //police_lightsALL();
-
-    showLeds();
-    FastLED.delay(1000/UPDATES_PER_SECOND);
 }
 
 // Fire2012 by Mark Kriegsman, July 2012
@@ -1486,7 +1493,6 @@ void mapNoiseToLEDsUsingPalette()
       CRGB color = ColorFromPalette( currentPalette, index, bri);
 
       leds[i][j] = color;
-      Serial.println();
     }
   }
   
@@ -1494,21 +1500,69 @@ void mapNoiseToLEDsUsingPalette()
 }
 void ChangePaletteAndSettingsPeriodically()
 {
-  uint8_t secondHand = ((millis() / 1000 / 10)) % 60;
-  static uint8_t lastSecond = 99;
-  
-  if( lastSecond != secondHand) {
-    lastSecond = secondHand;
-    if( secondHand ==  0)  { currentPalette = RainbowColors_p;         speed = 20; scale = 30; colorLoop = 1; }
-    if( secondHand ==  5)  { SetupPurpleAndGreenPalette();             speed = 10; scale = 50; colorLoop = 1; }
-    if( secondHand == 10)  { SetupBlackAndWhiteStripedPalette();       speed = 20; scale = 30; colorLoop = 1; }
-    if( secondHand == 15)  { currentPalette = ForestColors_p;          speed =  8; scale =120; colorLoop = 0; }
-    if( secondHand == 20)  { currentPalette = CloudColors_p;           speed =  4; scale = 30; colorLoop = 0; }
-    if( secondHand == 25)  { currentPalette = LavaColors_p;            speed =  8; scale = 50; colorLoop = 0; }
-    if( secondHand == 30)  { currentPalette = OceanColors_p;           speed = 20; scale = 90; colorLoop = 0; }
-    if( secondHand == 35)  { currentPalette = PartyColors_p;           speed = 20; scale = 30; colorLoop = 1; }
-    if( secondHand == 55)  { currentPalette = RainbowStripeColors_p;   speed = 30; scale = 20; colorLoop = 1; }
-  }
+    static byte iPalette = 0;
+    iPalette++;
+    if (iPalette > 8)
+        iPalette = 0;
+
+    switch(iPalette)
+    {
+        case 0: 
+            currentPalette = RainbowColors_p;         
+            speed = 20; 
+            scale = 30; 
+            colorLoop = 1;
+            break;
+        case 1:
+            SetupPurpleAndGreenPalette();             
+            speed = 10; 
+            scale = 50; 
+            colorLoop = 1;
+            break;
+        case 2:
+            SetupBlackAndWhiteStripedPalette();       
+            speed = 20; 
+            scale = 30; 
+            colorLoop = 1;
+            break;
+        case 3: 
+            currentPalette = ForestColors_p;         
+            speed = 8; 
+            scale = 120; 
+            colorLoop = 0;
+            break;
+        case 4: 
+            currentPalette = CloudColors_p;         
+            speed = 4; 
+            scale = 30; 
+            colorLoop = 0;
+            break;
+        case 5: 
+            currentPalette = LavaColors_p;         
+            speed = 8; 
+            scale = 50; 
+            colorLoop = 0;
+            break;
+        case 6: 
+            currentPalette = OceanColors_p;         
+            speed = 20; 
+            scale = 90; 
+            colorLoop = 0;
+            break;
+        case 7: 
+            currentPalette = PartyColors_p;         
+            speed = 20; 
+            scale = 30; 
+            colorLoop = 1;
+            break;
+        case 8: 
+            currentPalette = RainbowStripeColors_p;         
+            speed = 20; 
+            scale = 20; 
+            colorLoop = 1;
+            break;
+
+    }
 }
 
 CRGB getFlameColor()
@@ -1577,6 +1631,7 @@ CRGB getFlameColorFromPalette()
         0x000088,
         0x000088
     };
+
 
     if (mux.isLifeTestOn())
         return ColorFromPalette(coldFlames, random8(), 128, LINEARBLEND);
