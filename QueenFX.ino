@@ -2,7 +2,8 @@
 #include <FastLED.h>
 #include "Mux.h"
 
-const byte realLedCount = 192;
+const byte realLedCount = 252;
+//const byte realLedCount = 192;
 const byte ledCount = 139;
 const byte realNumStrips = 12;
 const byte numStrips = 14;
@@ -20,9 +21,9 @@ int FIRST_THIRD = int(ledCount/3);
 int SECOND_THIRD = FIRST_THIRD * 2;
 int EVENODD = ledCount%2;
 
-byte cushionLeft = 13;
-byte cushionRight = 14;
 byte tailLights = 12;
+byte cushionsBack = 13;
+byte cushionFront = 14;
 
 CRGB realLeds[numStrips][realLedCount];
 CRGB leds[numStrips][ledCount];
@@ -70,9 +71,7 @@ uint16_t speed = 20; // speed is set dynamically once we've started up
 uint16_t scale = 30; // scale is set dynamically once we've started up
 
 // This is the array that we keep our computed noise values in
-const byte noiseScale = 5;
-const byte noiseWidth = (ledCount / noiseScale)+1;
-uint8_t noise[noiseWidth][noiseWidth];
+uint8_t noise[numStrips][ledCount];
 
 uint8_t colorLoop = 1;
 
@@ -92,7 +91,7 @@ void setup()
   delay(1000);
             
   LEDS.addLeds<WS2811_PORTDC,16>(*realLeds, realLedCount);
-  LEDS.setBrightness(255);
+  LEDS.setBrightness(128);
         
   currentPalette = HeatColors_p;
   currentBlending = LINEARBLEND;
@@ -544,7 +543,6 @@ void rotatingRainbow()
 
 void spiralRainbow()
 {
-    static byte hue = 0;
     static CHSV hsv = CHSV(0,255,255);
     static unsigned long lastTime = millis();
     static byte iStrip = 0;
@@ -1249,7 +1247,8 @@ void loop() {
     case CMux::dialLow:
       if (mux.isLifeTestOn())
         currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
-
+      else if (mux.isEmissionOn())
+        currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Purple, CRGB::Fuchsia,  CRGB::Red);
       else
         currentPalette = HeatColors_p;
       Fire2012WithPalette();
@@ -1283,7 +1282,7 @@ void loop() {
 
   cushions();
 
-/*
+
   for(int i = 0;i< numStrips;i++)
   {
     // make the last one blue
@@ -1298,59 +1297,19 @@ void loop() {
 
   for(byte s = 0;s < numStrips;s++)
     leds[s][0] = CRGB::Yellow;
-*/
+
+  for(byte s = 0;s < numStrips;s++)
+  {
+    for (int h = 0; h < s; h++)    
+        leds[s][h] = CRGB::Green;
+  }
+
 
 
     //police_lightsALL();
 
     showLeds();
     FastLED.delay(1000/UPDATES_PER_SECOND);
-    return;
-
-    onSelectorChange(mux.getDial());
-
-    if (mux.getCutOff() < 25)
-        strip_march_cw(100);
-    else if (mux.getCutOff() > 1000)
-        strip_march_ccw(100);     
-    
-    switch(ledMode)
-    {
-        case 0:
-            //soundMachine(0xCC0066, mux.getCutOff());
-            sin_bright_wave(240, 35);       //--- SIN WAVE BRIGHTNESS
-            break;
-        case 1:
-            fillSolid(CRGB::White);
-            break;
-        default:
-            break;
-    }
-    
-
-    if (ledMode == 4) {random_burst(20);}                //---RANDOM
-    if (ledMode == 5) {color_bounce(20);}                //---CYLON v1
-    if (ledMode == 6) {color_bounceFADE(20);}            //---CYLON v2
-
-    if (ledMode == 9) {flicker(200,255);}                //---STRIP FLICKER
-    if (ledMode == 10) {pulse_one_color_all(0, 10);}     //--- PULSE COLOR BRIGHTNESS
-    if (ledMode == 11) {pulse_one_color_all_rev(0, 10);} //--- PULSE COLOR SATURATION
-    if (ledMode == 12) {fade_vertical(240, 60);}         //--- VERTICAL SOMETHING
-    if (ledMode == 14) {random_march(30);}               //--- MARCH RANDOM COLORS
-    if (ledMode == 15) {rwb_march(50);}                  //--- MARCH RWB COLORS
-    if (ledMode == 16) {radiation(120, 60);}             //--- RADIATION SYMBOL (OR SOME APPROXIMATION)
-    if (ledMode == 17) {color_loop_vardelay();}          //--- VARIABLE DELAY LOOP
-    if (ledMode == 18) {white_temps();}                  //--- WHITE TEMPERATURES
-    if (ledMode == 19) {sin_bright_wave(240, 35);}       //--- SIN WAVE BRIGHTNESS
-    if (ledMode == 20) {pop_horizontal(300, 100);}       //--- POP LEFT/RIGHT
-    if (ledMode == 21) {quad_bright_curve(240, 100);}    //--- QUADRATIC BRIGHTNESS CURVE  
-    if (ledMode == 22) {flame();}                        //--- FLAME-ISH EFFECT
-    //if (ledMode == 25) {musicReactiveFade(mux.getCutOff());}
-    if (ledMode == 26) {fourthOfJuly();}
-    if (ledMode == 28) {yxyy();}
-        
-    showLeds();
-    FastLED.delay(1000 / UPDATES_PER_SECOND);
 }
 
 // Fire2012 by Mark Kriegsman, July 2012
@@ -1468,9 +1427,9 @@ void fillnoise8() {
     dataSmoothing = 200 - (speed * 4);
   }
   
-  for(int i = 0; i < noiseWidth; i++) {
+  for(int i = 0; i < numStrips; i++) {
     int ioffset = scale * i;
-    for(int j = 0; j < noiseWidth; j++) {
+    for(int j = 0; j < ledCount; j++) {
       int joffset = scale * j;
       
       uint8_t data = inoise8(noiseX + ioffset,noiseY + joffset,noiseZ);
@@ -1502,14 +1461,14 @@ void mapNoiseToLEDsUsingPalette()
 {
   static uint8_t ihue=0;
   
-  for(int i = 0; i < noiseWidth; i++) {
-    for(int j = 0; j < noiseWidth; j++) {
+  for(int i = 0; i < numStrips; i++) {
+    for(int j = 0; j < ledCount; j++) {
       // We use the value at the (i,j) coordinate in the noise
       // array for our brightness, and the flipped value from (j,i)
       // for our pixel's index into the color palette.
 
-      uint8_t index = noise[j][i];
-      uint8_t bri =   noise[i][j];
+      uint8_t index = noise[i][j];
+      uint8_t bri =   noise[numStrips - i - 1][ledCount - j - 1];
 
       // if this palette is a 'loop', add a slowly-changing base value
       if( colorLoop) { 
@@ -1526,20 +1485,7 @@ void mapNoiseToLEDsUsingPalette()
 
       CRGB color = ColorFromPalette( currentPalette, index, bri);
 
-      Serial.println();
-      for(int k = 0;k<noiseScale;k++)
-      {
-        Serial.print("[");
-        Serial.print(j);        
-        Serial.print(".");
-        Serial.print(k);
-        Serial.print("]=");
-        Serial.print(j*noiseScale+k);
-
-        if((j*2+k) > ledCount -2)
-            break;
-        leds[i][j*noiseScale+k] = color;
-      }
+      leds[i][j] = color;
       Serial.println();
     }
   }
@@ -1548,7 +1494,7 @@ void mapNoiseToLEDsUsingPalette()
 }
 void ChangePaletteAndSettingsPeriodically()
 {
-  uint8_t secondHand = ((millis() / 1000)) % 60;
+  uint8_t secondHand = ((millis() / 1000 / 10)) % 60;
   static uint8_t lastSecond = 99;
   
   if( lastSecond != secondHand) {
@@ -1644,20 +1590,6 @@ void pulseJets()
   for (int i = 0;i<50;i++)
   {
     realLeds[tailLights][i] = getFlameColorFromPalette();
-
-    //leds[tailLights][i] += CRGB(redShift,0,0);
-    //leds[tailLights][99-i]+= CRGB(redShift,0,0);
-  }
-}
-
-void opulseJets()
-{
-  static bool increment = true;
-  static byte hue = 0;
-
-  for (int i = 0;i<50;i++)
-  {
-    realLeds[tailLights][i] = getFlameColorFromPalette();
     realLeds[tailLights][99-i] = getFlameColorFromPalette();
 
     //leds[tailLights][i] += CRGB(redShift,0,0);
@@ -1696,27 +1628,15 @@ void bigSmile()
 
 void cushions()
 {
-  static byte phase = 0;
-  const byte cushionLeds = 21;
+  static byte currentLed = 0;
+  currentLed++;
+  if (currentLed >= realLedCount -1)
+    currentLed = 0;
 
-  for (int column = 0;column<6;column++)
-  {
-    phase += 3;
-    for (int row = 0;row < cushionLeds; row++)
-    {
-      if (phase % 3)
-      {
-        realLeds[cushionLeft][cushionLeds*column + row] = CRGB::Blue;
-        realLeds[cushionLeft][cushionLeds*column + row] += CRGB(row*20,0,0);
-      }
-      else
-      {
-        realLeds[cushionLeft][cushionLeds*column + row] = CRGB::Red;
-        realLeds[cushionLeft][cushionLeds*column + row] += CRGB(0,0,row*20);
-      }
-    }
-  }
-//  fill_solid(leds[cushionRight], 126, row % 2 ? CRGB::Blue : CRGB::Red);
+  realLeds[cushionsBack][currentLed] = CRGB::Red;
+  realLeds[cushionsBack][realLedCount -currentLed] = CRGB::Red;
+
+  fadeToBlackBy(realLeds[cushionsBack], realLedCount, 20);
 }
 
 
