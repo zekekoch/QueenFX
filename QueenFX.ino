@@ -142,6 +142,7 @@ void showLeds()
                     realLeds[0][iLed] = leds[iStrip][mapLed(iLed, ledCount, stripLengths[iStrip])];
                 }                
                 break;
+            case 3: 
             default:
                 for(byte iLed = 0;iLed < ledCount;iLed++)
                 {
@@ -1195,7 +1196,7 @@ void loop() {
   } 
   else
   {
-    LEDS.setBrightness(128);
+    LEDS.setBrightness(200);
   }
 
 
@@ -1256,6 +1257,7 @@ void loop() {
       break;
   }
 
+  rotatingRainbow();
 
   pulseJets();
   cushions();
@@ -1355,12 +1357,14 @@ void Fire2012WithPalette()
     // Less cooling = taller flames.  More cooling = shorter flames.
     // Default 55, suggested range 20-100 
     const byte COOLING = mux.getCutOff();
+    if (COOLING < 10)
+        COOLING == 75;
 
 
     // SPARKING: What chance (out of 255) is there that a new spark will be lit?
     // Higher chance = more roaring fire.  Lower chance = more flickery fire.
     // Default 120, suggested range 50-200.
-    const byte SPARKING = 120;
+    const byte SPARKING = 200;
 
     // Array of temperature readings at each simulation cell
     static byte heat[ledCount];
