@@ -2,15 +2,36 @@
 #include <FastLED.h>
 #include "Mux.h"
 
-const byte realLedCount = 252;
+//const int realLedCount = 252;
 //const byte realLedCount = 192;
-const byte ledCount = 139;
+const int ledCount = 278;
 const byte realNumStrips = 12;
 const byte numStrips = 14;
 const byte UPDATES_PER_SECOND =200;
 
 // the front of the car has shorter lights
-const byte stripLengths[14] = {36, 70, 84, 102, 115, 126, 139, 139, 139, 139, 139, 139, 139, 139} ;
+//const byte stripLengths[14] = {36, 70, 84, 102, 115, 126, 139, 139, 139, 139, 139, 139, 139, 139} ;
+const int stripLengths[14] = {72, 140, 168, 204, 230, 252, 278, 278, 278, 278, 278, 278, 278, 278} ;
+
+// map the physical tubes tubes to the pins
+const byte tubes[16]
+{ 2,  // 1
+  7,  // 2
+  0,  // 3
+  4,  // 4
+  12,  //placeholder
+  3,  //placeholder
+  11,  //placeholder
+  1, // 8
+  15, // 9
+  13, // 10
+  8, // 11
+  6,  // 12 - tail lights
+  9,  // 13 
+  5, //buffer
+  10, //buffer
+  14  //buffer
+} ;
 
 CMux mux;
 
@@ -22,10 +43,10 @@ int SECOND_THIRD = FIRST_THIRD * 2;
 int EVENODD = ledCount%2;
 
 byte tailLights = 12;
-byte cushionsBack = 13;
-byte cushionFront = 14;
+//byte cushionsBack = 13;
+//byte cushionFront = 14;
 
-CRGB realLeds[numStrips][realLedCount];
+CRGB realLeds[numStrips][ledCount];
 CRGB leds[numStrips][ledCount];
 CRGB ledBuffer[numStrips][ledCount];
 
@@ -36,7 +57,7 @@ int ledMode = 23;      //-START IN DEMO MODE
 //int ledMode = 5;
 
 //-PERISTENT VARS
-byte idex = 0;        //-LED INDEX (0 to ledCount-1
+int idex = 0;        //-LED INDEX (0 to ledCount-1
 byte ihue = 0;        //-HUE (0-360)
 int ibright = 0;     //-BRIGHTNESS (0-255)
 int isat = 0;        //-SATURATION (0-255)
@@ -90,8 +111,8 @@ void setup()
 {
   delay(1000);
             
-  LEDS.addLeds<WS2811_PORTDC,16>(*realLeds, realLedCount);
-  LEDS.setBrightness(128);
+  LEDS.addLeds<WS2811_PORTDC,16>(*realLeds, ledCount);
+  LEDS.setBrightness(32);
         
   currentPalette = HeatColors_p;
   currentBlending = LINEARBLEND;
@@ -124,33 +145,39 @@ void showLeds()
         switch(iStrip)
         {
             case 0:
-                for(byte iLed = 0;iLed < stripLengths[iStrip];iLed++)
+                for(int iLed = 0;iLed < stripLengths[iStrip];iLed++)
                 {
                     realLeds[0][iLed+155] = leds[iStrip][mapLed(iLed, ledCount, stripLengths[iStrip])];
                 }                
                 break;
             case 1: 
                 // this one is backwards
-                for(byte iLed = 0;iLed < stripLengths[iStrip];iLed++)
+                for(int iLed = 0;iLed < stripLengths[iStrip];iLed++)
                 {
                     realLeds[0][154-iLed] = leds[iStrip][mapLed(iLed, ledCount, stripLengths[iStrip])];
                 }                
                 break;
             case 2:
-                for(byte iLed = 0;iLed < 84;iLed++)
+                for(int iLed = 0;iLed < 84;iLed++)
                 {
                     realLeds[0][iLed] = leds[iStrip][mapLed(iLed, ledCount, stripLengths[iStrip])];
                 }                
                 break;
             case 3: 
             default:
-                for(byte iLed = 0;iLed < ledCount;iLed++)
+                for(int iLed = 0;iLed < ledCount;iLed++)
                 {
                     realLeds[iStrip - 2][iLed] = leds[iStrip][mapLed(iLed, ledCount, stripLengths[iStrip])];
                 }
             break;
         }
     }
+    realLeds[15][0] = CRGB::Red;
+    realLeds[15][1] = CRGB::Blue;
+    realLeds[15][2] = CRGB::Green;
+    realLeds[15][3] = CRGB::White;
+
+
     LEDS.show();
 
 }
@@ -461,7 +488,7 @@ void fillSolid(int cred, int cgrn, int cblu) { //-SET ALL LEDS TO ONE COLOR
 
 void explosion()
 {
-    static byte counter = 0;
+    static int counter = 0;
     counter++; 
 
     //    leds[random8(numStrips)][random8(ledCount)] = CHSV(0,255,255);
@@ -474,7 +501,7 @@ void explosion()
 
     for(byte iStrip = 1;iStrip < numStrips-1;iStrip++)
     {
-        for(byte iLed = 1; iLed < ledCount-1;iLed++)
+        for(int iLed = 1; iLed < ledCount-1;iLed++)
         {
 
             if (ledBuffer[iStrip][iLed].red > 200)
@@ -483,7 +510,8 @@ void explosion()
                 //printLed(iStrip, iLed);
             }
 
-            byte count = 0;
+            // BUG: why am I reseting count here?
+            int count = 0;
             if (ledBuffer[iStrip-1][iLed].red > 200)
             {
                 count++;
@@ -495,18 +523,6 @@ void explosion()
             if (ledBuffer[iStrip][iLed-1].red > 200)
                 count++;
 
-            /*
-            if (ledBuffer[iStrip+1][iLed-1].red > 200)
-                count++;
-            if (ledBuffer[iStrip+1][iLed].red > 200)
-                count++;
-            if (ledBuffer[iStrip+1][iLed+1].red > 200)
-                count++;
-            if (ledBuffer[iStrip][iLed+1].red > 200)
-                count++;
-            if (ledBuffer[iStrip-1][iLed+1].red > 200)
-                count++;
-            */
             if (count > 0)
             {
                 Serial.print("*");
@@ -520,7 +536,7 @@ void explosion()
     //    fadeToBlackBy(leds[i], ledCount, 30);
 }
 
-void printLed(byte s, byte l)
+void printLed(int s, byte l)
 {
     Serial.print("[");
     Serial.print(s);
@@ -618,8 +634,8 @@ void rainbow_fade() { //-FADE ALL LEDS THROUGH HSV RAINBOW
 
 
 void rainbow_loop(int istep, int idelay) { //-LOOP HSV RAINBOW
-    static byte idex = 0;
-    static byte offSet = 0;
+    static int idex = 0;
+    static int offSet = 0;
     idex++;
     ihue = ihue + istep;
     
@@ -1170,7 +1186,7 @@ boolean checkButton(byte whichButton)
     {
         if (0 == whichButton)
         {
-            return mux.getDynamicIntensifier();
+            return mux.isIntensifierOn();
         }
     }
     
@@ -1189,7 +1205,7 @@ void loop() {
     mux.getCutOff();
     mux.print();
   }
-
+  
   if (mux.isEmissionOn())
   {
     LEDS.setBrightness(32);
@@ -1198,7 +1214,6 @@ void loop() {
   {
     LEDS.setBrightness(200);
   }
-
 
   switch(mux.getDial())
   {
@@ -1210,7 +1225,7 @@ void loop() {
       // Periodically choose a new palette, speed, and scale
         static bool lastTest = false;
         static bool lt = false;
-        lt = mux.getLifeTest();
+        lt = mux.isLifeTestOn();
 
         if (lt != lastTest)
         {
@@ -1218,7 +1233,7 @@ void loop() {
             {
               ChangePaletteAndSettingsPeriodically();                
             }
-          lastTest = mux.getLifeTest();            
+          lastTest = mux.isLifeTestOn();            
         }
 
       // generate noise data
@@ -1257,10 +1272,10 @@ void loop() {
       break;
   }
 
-  rotatingRainbow();
+ // rotatingRainbow();
 
-  pulseJets();
-  cushions();
+  //pulseJets();
+  //cushions();
 
 
   //debugColors();
@@ -1351,14 +1366,14 @@ void debugColors()
 void Fire2012WithPalette()
 {
     fillSolid(CRGB::Black);
-    byte height = ledCount / 2;
+    int height = ledCount / 2;
 
     // COOLING: How much does the air cool as it rises?
     // Less cooling = taller flames.  More cooling = shorter flames.
     // Default 55, suggested range 20-100 
-    const byte COOLING = mux.getCutOff();
+    byte COOLING = mux.getCutOff();
     if (COOLING < 10)
-        COOLING == 75;
+        COOLING = 75;
 
 
     // SPARKING: What chance (out of 255) is there that a new spark will be lit?
@@ -1405,28 +1420,10 @@ void mirror()
 {
   for(byte col = 0;col < numStrips;col++)
   {
-    for(byte row = 0;row < ledCount/2;row++)
+    for(int row = 0;row < ledCount/2;row++)
       leds[col][ledCount - row -1] = leds[col][row];  
   }
 }
-
-/*
-void soundMachine(CRGB color, byte eq[7]){
-    CRGB baseColor = CRGB::LightPink;
-    CRGB highlightColor = color;
-    
-    int bass = (eq[0] + eq[1]) / 2;
-    int high = (eq[4] + eq[4]) /2;
-    
-    bass > 100 ? fillSolid(0, highlightColor) : fillSolid(0, baseColor);
-    bass > 150 ? fillSolid(1, highlightColor) : fillSolid(1, baseColor);
-    bass > 200 ? fillSolid(2, highlightColor) : fillSolid(2, baseColor);
-    high > 150 ? fillSolid(3, highlightColor) : fillSolid(3, baseColor);
-    high > 100 ? fillSolid(4, highlightColor) : fillSolid(4, baseColor);
-    high > 200 ? fillSolid(5, highlightColor) : fillSolid(5, baseColor);
-    high > 200 ? fillSolid(6, highlightColor) : fillSolid(6, baseColor);
-}
-*/
 
 // Fill the x/y array of 8-bit noise values using the inoise8 function.
 void fillnoise8() {
@@ -1685,6 +1682,7 @@ void bigSmile()
 
 }
 
+/*
 void cushions()
 {
   static byte currentLed = 0;
@@ -1697,7 +1695,7 @@ void cushions()
 
   fadeToBlackBy(realLeds[cushionsBack], realLedCount, 20);
 }
-
+*/
 
 // GETS CALLED BY SERIALCOMMAND WHEN NO MATCHING COMMAND
 void unrecognized(const char *command) {
