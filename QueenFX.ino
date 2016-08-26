@@ -4,60 +4,68 @@
 
 //const int realLedCount = 252;
 //const byte realLedCount = 192;
-const int ledCount = 278;
-const byte realNumStrips = 12;
+const int ledCount = 298;
+const int longestTube = 273;
+
+// there are 14 led strips (12 on tubes, one for the tail lights and one for the dashboard)
 const byte numStrips = 14;
-const byte UPDATES_PER_SECOND =200;
+CRGB leds[numStrips][ledCount];
+CRGB ledBuffer[numStrips][ledCount];
 
-// the front of the car has shorter lights
-//const byte stripLengths[14] = {36, 70, 84, 102, 115, 126, 139, 139, 139, 139, 139, 139, 139, 139} ;
-const int stripLengths[14] = {72, 140, 168, 204, 230, 252, 278, 278, 278, 278, 278, 278, 278, 278} ;
+// there are 14 tubes (the front is atached to strip 2 and the 2nd is attached to tube 1)
+const byte numTubes = 14;
 
-// map the physical tubes tubes to the pins
-const byte tubes[16]
+// fastLED thinks there are 16 strips, but I only use 14 of them
+const byte numVirtualStrips = 16;
+CRGB realLeds[numVirtualStrips][ledCount];
+const byte tubes[numVirtualStrips]
 { 2,  // 1
   7,  // 2
   0,  // 3
   4,  // 4
-  12,  //placeholder
-  3,  //placeholder
-  11,  //placeholder
-  1, // 8
+  12, // 5
+  3,  // 6
+  11, // 7
+  1,  // 8
   15, // 9
   13, // 10
-  8, // 11
+  8,  // 11
   6,  // 12 - tail lights
   9,  // 13 
-  5, //buffer
-  10, //buffer
-  14  //buffer
+  5,  // 14 buffer
+  10, // 15 buffer
+  14  // 16 buffer
 } ;
+
+const byte UPDATES_PER_SECOND =200;
+const byte BRIGHTNESS = 96;
+const byte FRAMES_PER_SECOND = 120;
+
+// the front of the car has shorter lights
+const int tubeLengths[numStrips] = {73, 136, 162, 199, 224, 247, 273, 273, 273, 273, 273, 273, 273, 273} ;
+
 
 CMux mux;
 
 // globals for FX animations
 int BOTTOM_INDEX = 0;
 int TOP_INDEX = int(ledCount/2);
-int FIRST_THIRD = int(ledCount/3);
+int FIRST_THIRD = int(longestTube/3);
 int SECOND_THIRD = FIRST_THIRD * 2;
-int EVENODD = ledCount%2;
+int EVENODD = longestTube%2;
 
 byte tailLights = 12;
 //byte cushionsBack = 13;
 //byte cushionFront = 14;
 
-CRGB realLeds[numStrips][ledCount];
-CRGB leds[numStrips][ledCount];
-CRGB ledBuffer[numStrips][ledCount];
-
-CRGB ledsX[ledCount]; //-ARRAY FOR COPYING WHATS IN THE LED STRIP CURRENTLY (FOR CELL-AUTOMATA, ETC)
-const byte ledCounts[] = { };
+CRGB ledsX[longestTube]; //-ARRAY FOR COPYING WHATS IN THE LED STRIP CURRENTLY (FOR CELL-AUTOMATA, ETC)
+const byte longestTubes[] = { };
 
 int ledMode = 23;      //-START IN DEMO MODE
 //int ledMode = 5;
 
 //-PERISTENT VARS
-int idex = 0;        //-LED INDEX (0 to ledCount-1
+int idex = 0;        //-LED INDEX (0 to longestTube-1
 byte ihue = 0;        //-HUE (0-360)
 int ibright = 0;     //-BRIGHTNESS (0-255)
 int isat = 0;        //-SATURATION (0-255)
@@ -92,9 +100,36 @@ uint16_t speed = 20; // speed is set dynamically once we've started up
 uint16_t scale = 30; // scale is set dynamically once we've started up
 
 // This is the array that we keep our computed noise values in
-uint8_t noise[numStrips][ledCount];
+uint8_t noise[numTubes][longestTube];
 
 uint8_t colorLoop = 1;
+
+// i don't know why I need to declare these...
+void Fire2012WithPalette();
+void rotatingRainbow(); 
+void rainbowWithGlitter();
+void spiralRainbow();
+void police_lightsALL();
+void sinelon();
+void juggle();
+void mapNoiseToLEDsUsingPalette();
+
+// List of patterns to cycle through.  Each is defined as a separate function below.
+typedef void (*SimplePatternList[])();
+SimplePatternList gPatterns = { 
+    Fire2012WithPalette,
+    rotatingRainbow, 
+    rainbowWithGlitter, 
+    spiralRainbow,
+    police_lightsALL,
+    sinelon, 
+    juggle, 
+    mapNoiseToLEDsUsingPalette
+};
+
+uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
+uint8_t gHue = 0; // rotating "base color" used by many of the patterns
+
 
 //
 // Mark's xy coordinate mapping code.  See the XYMatrix for more information on it.
@@ -102,7 +137,7 @@ uint8_t colorLoop = 1;
 uint16_t XY( uint8_t x, uint8_t y)
 {
   uint16_t i;
-  i = (y * numStrips) + x;
+  i = (y * numTubes) + x;
   return i;
 }
 
@@ -134,40 +169,120 @@ int mapLed(int led, int from, int to)
     else
         return led * ((from * 1024)/to) / (1024); 
 }
-// the front of the car has shorter lights
-//const byte stripLengths[14] = {36, 70, 84, 102, 115, 126, 139, 139, 139, 139, 139, 139, 139, 139} ;
 
+
+// the leds for the tubes are in an array called leds
+// the array that FastLED uses to write to the actual strips is 
+// called realLeds.
+//
+// I need to copy the data from the leds array to the realLeds array 
+// taking into consideration the fact that I'm sharing some led strips
+// between different physical tubes (tube 1 is the end of strip 2, tube 2 
+// is the end of strip 1). To make things slightly more difficult the 
+// secondary tubes are backwards and the order of the strips on my art 
+// car doesn't match the order of FastLeds' parallel output.
+// phew
 void showLeds()
 {
+    // 14 virtual 
+  for(int currentStrip = 0; currentStrip < numStrips; currentStrip++) 
+  {
+    byte fastLedStrip = tubes[currentStrip];
+    Serial.print("Strip ");
+    Serial.print(currentStrip);
+    Serial.print(" FastLed ");
+    Serial.print(fastLedStrip);
+    Serial.println();
+    Serial.println();
+
+    // the 2nd light strip is connected to the end of the 3rd light strip
+    if(currentStrip == 0)
+    {
+    Serial.print(" 0 Strip ");
+    Serial.print(currentStrip);
+    Serial.print(" FastLed ");
+    Serial.print(fastLedStrip);
+    Serial.println();
+        // make the end of the tube white for debugging purposes
+        //realLeds[currentStrip][tubeLengths[2]] = CRGB::White;
+
+        // first deal with the third tube
+        for(int iLed = 0; iLed <= tubeLengths[2]; iLed++) 
+        {
+            realLeds[fastLedStrip][iLed] = leds[currentStrip][iLed];
+        }
+
+        for(int iLed = 0; iLed <= tubeLengths[1]; iLed++) 
+        {
+            realLeds[fastLedStrip][tubeLengths[2]+iLed] = leds[1][iLed];
+        }
+
+      //leds[tubes[currentTube]][tubeLengths[1]+ tubeLengths[2]] = CRGB::White;
+    }
+
+    // the 1st light strip is connected to the end of the 4th  light strip
+    if(currentStrip == 1)
+    {
+        // first deal with the third tube
+        for(int iLed = 0; iLed <= tubeLengths[3]; iLed++) 
+        {
+            realLeds[fastLedStrip][iLed] = leds[currentStrip][iLed];
+        }
+
+        for(int iLed = 0; iLed <= tubeLengths[0]; iLed++) 
+        {
+            realLeds[fastLedStrip][tubeLengths[3]+iLed] = leds[0][iLed];
+        }
+      //leds[tubes[currentTube]][tubeLengths[3]] = CRGB::White;
+      //leds[tubes[currentTube]][tubeLengths[0]+tubeLengths[3]] = CRGB::White;
+    }
+    else
+    {
+        for(int iLed = 0; iLed <= tubeLengths[currentStrip]; iLed++) 
+        {
+            realLeds[fastLedStrip][iLed] = leds[currentStrip][iLed];
+        }
+      //leds[tubes[currentTube]][tubeLengths[currentTube+2]] = CRGB::White;
+    }
+
+    Serial.println();
+  }
+
+  LEDS.show();
+
+}
+
+void oldShowLeds()
+{
     // there are 13 phyical strips, but the first three are all on one logical strip
-    for (byte iStrip = 0;iStrip < numStrips;iStrip++)
+    for (byte iStrip = 0;iStrip < numTubes;iStrip++)
     {
         switch(iStrip)
         {
             case 0:
-                for(int iLed = 0;iLed < stripLengths[iStrip];iLed++)
+                for(int iLed = 0;iLed < tubeLengths[iStrip];iLed++)
                 {
-                    realLeds[0][iLed+155] = leds[iStrip][mapLed(iLed, ledCount, stripLengths[iStrip])];
+                    realLeds[0][iLed+155] = leds[iStrip][mapLed(iLed, ledCount, tubeLengths[iStrip])];
                 }                
                 break;
             case 1: 
                 // this one is backwards
-                for(int iLed = 0;iLed < stripLengths[iStrip];iLed++)
+                for(int iLed = 0;iLed < tubeLengths[iStrip];iLed++)
                 {
-                    realLeds[0][154-iLed] = leds[iStrip][mapLed(iLed, ledCount, stripLengths[iStrip])];
+                    realLeds[0][154-iLed] = leds[iStrip][mapLed(iLed, ledCount, tubeLengths[iStrip])];
                 }                
                 break;
             case 2:
                 for(int iLed = 0;iLed < 84;iLed++)
                 {
-                    realLeds[0][iLed] = leds[iStrip][mapLed(iLed, ledCount, stripLengths[iStrip])];
+                    realLeds[0][iLed] = leds[iStrip][mapLed(iLed, ledCount, tubeLengths[iStrip])];
                 }                
                 break;
             case 3: 
             default:
                 for(int iLed = 0;iLed < ledCount;iLed++)
                 {
-                    realLeds[iStrip - 2][iLed] = leds[iStrip][mapLed(iLed, ledCount, stripLengths[iStrip])];
+                    realLeds[iStrip - 2][iLed] = leds[iStrip][mapLed(iLed, ledCount, tubeLengths[iStrip])];
                 }
             break;
         }
@@ -199,9 +314,9 @@ void FillLEDsFromPaletteColors( uint8_t colorIndex, uint8_t width)
 {
     uint8_t brightness = 255;
     
-    for(int iStrip = 0;iStrip < numStrips;iStrip++)
+    for(int iStrip = 0;iStrip < numTubes;iStrip++)
     {
-        for( int iLed = 0; iLed < ledCount;iLed++) 
+        for( int iLed = 0; iLed < longestTube;iLed++) 
         {
             leds[iStrip][iLed] = ColorFromPalette( currentPalette, colorIndex, brightness, currentBlending);
             // how quickly you move through the colors is how wide the strips are of a given color
@@ -308,22 +423,22 @@ const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM =
 
 //------------------------------------- UTILITY FXNS --------------------------------------
 
-//-SET THE COLOR OF A SINGLE RGB LED
+//-SET THE COLOR OF A SINGLE RGB LED on all tubes
 void setPixel(int adex, int cred, int cgrn, int cblu) {
-    if (adex < 0 || adex > ledCount-1)
+    if (adex < 0 || adex > longestTube-1)
         return;
 
-    for(int i = 0;i<numStrips;i++)
+    for(int i = 0;i<numTubes;i++)
     {
         leds[i][adex] = CRGB(cred, cgrn, cblu);
     }
 }
 
 void setPixel(int adex, CRGB c) {
-    if (adex < 0 || adex > ledCount-1)
+    if (adex < 0 || adex > longestTube-1)
         return;
 
-    for(int i = 0;i<numStrips;i++)
+    for(int i = 0;i<numTubes;i++)
     {
         leds[i][adex] = c;
     }
@@ -341,24 +456,24 @@ int horizontal_index(int i) {
     if (i == TOP_INDEX && EVENODD == 0) {
         return TOP_INDEX;
     }
-    return ledCount - i;
+    return longestTube - i;
 }
 
 
 //-FIND INDEX OF ANTIPODAL OPPOSITE LED
 int antipodal_index(int i) {
-    //int N2 = int(ledCount/2);
+    //int N2 = int(longestTube/2);
     int iN = i + TOP_INDEX;
     if (i >= TOP_INDEX) {
-        iN = ( i + TOP_INDEX ) % ledCount; 
+        iN = ( i + TOP_INDEX ) % longestTube; 
     }
     return iN;
 }
 
 int nextThird(int i) {
-    int iN = i + (int)(ledCount / 3);
-    if (iN >= ledCount) {
-        iN = iN % ledCount;
+    int iN = i + (int)(longestTube / 3);
+    if (iN >= longestTube) {
+        iN = iN % longestTube;
     }
     return iN;
 }
@@ -368,8 +483,8 @@ int adjacent_cw(int i) {
     if (i < 0) {
         r = 0;
     }
-    else if (i >= ledCount - 1) {
-        r = ledCount;
+    else if (i >= longestTube - 1) {
+        r = longestTube;
     }
     else {
         r = i + 1;
@@ -386,8 +501,8 @@ int adjacent_ccw(int i) {
     if (i <= 0) {
         r = 0;
     }
-    else if (i > ledCount) {
-        r = ledCount - 1;
+    else if (i > longestTube) {
+        r = longestTube - 1;
     }
     else {
         r = i - 1;
@@ -419,7 +534,7 @@ CRGB HSVtoRGB(int hue, int sat, int val) {
 
 // todo: make this work with multiple arrays
 void copy_led_array(){
-    for(int i = 0; i < ledCount; i++ ) {
+    for(int i = 0; i < longestTube; i++ ) {
         ledsX[i][0] = leds[0][i].r;
         ledsX[i][1] = leds[0][i].g;
         ledsX[i][2] = leds[0][i].b;
@@ -428,11 +543,11 @@ void copy_led_array(){
 
 void fillBuffer()
 {
-    for(int iStrip = 0; iStrip < numStrips; iStrip++ ) 
+    for(int iTube = 0; iTube < numTubes; iTube++ ) 
     {
-        for(int iLed = 0; iLed < ledCount;iLed++)
+        for(int iLed = 0; iLed < longestTube;iLed++)
         {
-            ledBuffer[iStrip][iLed] = leds[iStrip][iLed];
+            ledBuffer[iTube][iLed] = leds[iTube][iLed];
         }
     }
 }
@@ -465,7 +580,7 @@ void print_led_arrays(int ilen){
 void addGlitter( fract8 chanceOfGlitter) 
 {
   if( random8() < chanceOfGlitter) {
-    leds[random8(14)][ random16(ledCount) ] += CRGB::White;
+    leds[random8(14)][ random16(longestTube) ] += CRGB::White;
   }
 }
 
@@ -473,12 +588,12 @@ void addGlitter( fract8 chanceOfGlitter)
 void fillSolid(byte strand, const CRGB& color)
 {
     // fill_solid -   fill a range of LEDs with a solid color
- fill_solid( leds[strand], ledCount, color);
+ fill_solid( leds[strand], longestTube, color);
 }
 
 void fillSolid(CRGB color)
 {
-    for(int i = 0;i<numStrips;i++)
+    for(int i = 0;i<numTubes;i++)
         fillSolid(i, color);
 }
 
@@ -491,17 +606,16 @@ void explosion()
     static int counter = 0;
     counter++; 
 
-    //    leds[random8(numStrips)][random8(ledCount)] = CHSV(0,255,255);
-    leds[random8(numStrips)][random8(ledCount)] = CRGB(255,0,0);
+    leds[random8(numTubes)][random8(longestTube)] = CRGB(255,0,0);
 //    leds[5][5] = CRGB(255,0,0);
 
     fillBuffer();
 
-//    blur2d(*leds, numStrips, ledCount, 64);
+//    blur2d(*leds, numTubes, longestTube, 64);
 
-    for(byte iStrip = 1;iStrip < numStrips-1;iStrip++)
+    for(byte iStrip = 1;iStrip < numTubes-1;iStrip++)
     {
-        for(int iLed = 1; iLed < ledCount-1;iLed++)
+        for(int iLed = 1; iLed < longestTube-1;iLed++)
         {
 
             if (ledBuffer[iStrip][iLed].red > 200)
@@ -533,7 +647,7 @@ void explosion()
         Serial.println();
     }
     //for(int i = 0;i<numStrips;i++)
-    //    fadeToBlackBy(leds[i], ledCount, 30);
+    //    fadeToBlackBy(leds[i], longestTube, 30);
 }
 
 void printLed(int s, byte l)
@@ -550,9 +664,9 @@ void printLed(int s, byte l)
 void rotatingRainbow()
 {
     static byte hue = 0;
-    for(int i = 0;i < numStrips;i++)
+    for(int i = 0;i < numTubes;i++)
     {
-        fill_rainbow(leds[i], ledCount, hue++, 10);
+        fill_rainbow(leds[i], longestTube, hue++, 10);
         if(mux.isIntensifierOn())  
             addGlitter(255);
     }
@@ -570,17 +684,17 @@ void spiralRainbow()
     }
 
     iStrip++;
-    if (iStrip == numStrips)
+    if (iStrip == numTubes)
         iStrip = 0;
 
     hsv.hue += (mux.getCutOff() / 16) + 1;
 
-    for(int i = 0; i < numStrips;i++)
+    for(int i = 0; i < numTubes;i++)
     {
-        fadeToBlackBy(leds[i], ledCount, 30);
+        fadeToBlackBy(leds[i], longestTube, 30);
     }
 
-    for( int iLed = 0; iLed < ledCount; iLed++) 
+    for( int iLed = 0; iLed < longestTube; iLed++) 
     {
         leds[iStrip][iLed] = hsv;
     }
@@ -590,35 +704,32 @@ void spiralRainbow()
     lastTime = millis();
 }
 
-
 void juggle() 
 {
   // eight colored dots, weaving in and out of sync with each other
-    for(byte iStrip =0;iStrip < numStrips;iStrip++)
+    for(byte iStrip =0;iStrip < numTubes;iStrip++)
     {
-        fadeToBlackBy( leds[iStrip], ledCount, 20);
+        fadeToBlackBy( leds[iStrip], longestTube, 20);
     }
     
     byte dothue = 0;
-    for( int i = 0; i < numStrips; i++) {
-        leds[i][beatsin16(i+7,0,ledCount/2)] |= CHSV(dothue, 200, 255);
+    for( int i = 0; i < numTubes; i++) {
+        leds[i][beatsin16(i+7,0,longestTube/2)] |= CHSV(dothue, 200, 255);
     dothue += 32;
     }
     mirror();
 
 }
 
-
-
 void sinelon()
 {
     static byte gHue;
   // a colored dot sweeping back and forth, with fading trails
-    for(byte i = 0;i<numStrips;i++)
+    for(byte i = 0;i<numTubes;i++)
     {
 
-        fadeToBlackBy( leds[i], ledCount, 20);
-        int ypos = beatsin16(13,0,ledCount);
+        fadeToBlackBy( leds[i], longestTube, 20);
+        int ypos = beatsin16(13,0,longestTube);
         leds[i][ypos] += CHSV( gHue, 255, 192);
     }
 }
@@ -627,7 +738,7 @@ void rainbow_fade() { //-FADE ALL LEDS THROUGH HSV RAINBOW
     ihue++;
     CRGB thisColor;
     HSVtoRGB(ihue, 255, 255, thisColor);
-    for(int idex = 0 ; idex < ledCount; idex++ ) {
+    for(int idex = 0 ; idex < longestTube; idex++ ) {
         setPixel(idex,thisColor);
     }
 }
@@ -639,7 +750,7 @@ void rainbow_loop(int istep, int idelay) { //-LOOP HSV RAINBOW
     idex++;
     ihue = ihue + istep;
     
-    if (idex >= ledCount) {
+    if (idex >= longestTube) {
         idex = ++offSet;
     }
     
@@ -652,7 +763,7 @@ void rainbow_loop(int istep, int idelay) { //-LOOP HSV RAINBOW
 void random_burst(int idelay) { //-RANDOM INDEX/COLOR
     CRGB icolor;
     
-    idex = random(0,ledCount);
+    idex = random(0,longestTube);
     ihue = random(0,255);
     
     HSVtoRGB(ihue, 255, 255, icolor);
@@ -664,7 +775,7 @@ void color_bounce(int idelay) { //-BOUNCE COLOR (SINGLE LED)
     if (bounceForward)
     {
         idex = idex + 1;
-        if (idex == ledCount)
+        if (idex == longestTube)
         {
             bounceForward = false;
             idex = idex - 1;
@@ -679,7 +790,7 @@ void color_bounce(int idelay) { //-BOUNCE COLOR (SINGLE LED)
         }
     }
 
-    for(int i = 0; i < ledCount; i++ ) {
+    for(int i = 0; i < longestTube; i++ ) {
         if (i == idex) {
             setPixel(i, CRGB::Red);
         }
@@ -692,12 +803,12 @@ void color_bounce(int idelay) { //-BOUNCE COLOR (SINGLE LED)
 
 void police_lightsONE() { //-POLICE LIGHTS (TWO COLOR SINGLE LED)
     idex++;
-    if (idex >= ledCount) {
+    if (idex >= longestTube) {
         idex = 0;
     }
     int idexR = idex;
     int idexB = antipodal_index(idexR);
-    for(int i = 0; i < ledCount; i++ ) {
+    for(int i = 0; i < longestTube; i++ ) {
         if (i == idexR) {
             setPixel(i, CRGB::Red);
         }
@@ -722,7 +833,7 @@ void police_lightsALL()
 
 void police_lightsALLOld() { //-POLICE LIGHTS (TWO COLOR SOLID)
     idex++;
-    if (idex >= ledCount) {idex = 0;}
+    if (idex >= longestTube) {idex = 0;}
     int idexR = idex;
     int idexB = antipodal_index(idexR);
     setPixel(idexR, 255, 0, 0);
@@ -731,7 +842,7 @@ void police_lightsALLOld() { //-POLICE LIGHTS (TWO COLOR SOLID)
 
 void fourthOfJuly() { //-red, white and blue
     idex++;
-    if (idex >= ledCount) {idex = 0;}
+    if (idex >= longestTube) {idex = 0;}
     int idexR = idex;
     int idexW = nextThird(idexR);
     int idexB = nextThird(idexW);
@@ -742,7 +853,7 @@ void fourthOfJuly() { //-red, white and blue
 
 void yxyy() { //-red, white and blue
     idex++;
-    if (idex >= ledCount) 
+    if (idex >= longestTube) 
     {
       idex = 0;
     }
@@ -783,9 +894,9 @@ void musicReactiveFade(byte eq[7]) { //-BOUNCE COLOR (SIMPLE MULTI-LED FADE)
     if (bounceForward) {
         Serial.print("bouncing forward idex:");Serial.print(idex);Serial.println();
 
-        if (idex < ledCount) {
+        if (idex < longestTube) {
             idex++;
-        } else if (idex == ledCount) {
+        } else if (idex == longestTube) {
             bounceForward = !bounceForward;
         }
 
@@ -795,8 +906,8 @@ void musicReactiveFade(byte eq[7]) { //-BOUNCE COLOR (SIMPLE MULTI-LED FADE)
             setPixel(adjacent_cw(idex-i), HSVtoRGB(hue, 255, 255 - trailDecay*i));
         }
     } else {
-        if (idex > ledCount) {
-            idex = ledCount;
+        if (idex > longestTube) {
+            idex = longestTube;
         }
         if (idex >= 0) {
             idex--;
@@ -821,7 +932,7 @@ void musicReactiveFade(byte eq[7]) { //-BOUNCE COLOR (SIMPLE MULTI-LED FADE)
 void color_bounceFADE(int idelay) { //-BOUNCE COLOR (SIMPLE MULTI-LED FADE)
     if (bouncedirection == 0) {
         idex++;
-        if (idex == ledCount) {
+        if (idex == longestTube) {
             bouncedirection = 1;
             idex--;
         }
@@ -839,7 +950,7 @@ void color_bounceFADE(int idelay) { //-BOUNCE COLOR (SIMPLE MULTI-LED FADE)
     int iR2 = adjacent_ccw(iR1);
     int iR3 = adjacent_ccw(iR2);
     
-    for(int i = 0; i < ledCount; i++ ) {
+    for(int i = 0; i < longestTube; i++ ) {
         if (i == idex) {
             setPixel(i, CRGB(255, 0, 0));
         }
@@ -875,7 +986,7 @@ void flicker(int thishue, int thissat) {
     if (random_bool < 10) {
         HSVtoRGB(thishue, thissat, random_bright, thisColor);
         
-        for(int i = 0 ; i < ledCount; i++ ) {
+        for(int i = 0 ; i < longestTube; i++ ) {
             setPixel(i, thisColor);
         }
     }
@@ -896,7 +1007,7 @@ void pulse_one_color_all(int ahue, int idelay) { //-PULSE BRIGHTNESS ON ALL LEDS
     CRGB acolor;
     HSVtoRGB(ahue, 255, ibright, acolor);
     
-    for(int i = 0 ; i < ledCount; i++ ) {
+    for(int i = 0 ; i < longestTube; i++ ) {
         setPixel(i, acolor);
     }
 }
@@ -916,7 +1027,7 @@ void pulse_one_color_all_rev(int ahue, int idelay) { //-PULSE SATURATION ON ALL 
     CRGB acolor;
     HSVtoRGB(ahue, isat, 255, acolor);
     
-    for(int i = 0 ; i < ledCount; i++ ) {
+    for(int i = 0 ; i < longestTube; i++ ) {
         setPixel(i, acolor);
     }
 }
@@ -929,7 +1040,7 @@ void random_march(int idelay) { //RANDOM MARCH CCW
     HSVtoRGB(random(0,360), 255, 255, acolor);
     setPixel(0, acolor);
     
-    for(int i = 1; i < ledCount;i++ ) {  //-GET/SET EACH LED COLOR FROM CCW LED
+    for(int i = 1; i < longestTube;i++ ) {  //-GET/SET EACH LED COLOR FROM CCW LED
         iCCW = adjacent_ccw(i);
         setPixel(i, ledsX[iCCW]);
     }
@@ -955,7 +1066,7 @@ void rwb_march(int idelay) { //R,W,B MARCH CCW
             break;
     }
     
-    for(int i = 1; i < ledCount; i++ ) {  //-GET/SET EACH LED COLOR FROM CCW LED
+    for(int i = 1; i < longestTube; i++ ) {  //-GET/SET EACH LED COLOR FROM CCW LED
         iCCW = adjacent_ccw(i);
         setPixel(i, ledsX[iCCW][0], ledsX[iCCW][1], ledsX[iCCW][2]);
     }
@@ -963,8 +1074,8 @@ void rwb_march(int idelay) { //R,W,B MARCH CCW
 
 
 void white_temps() {
-    int N9 = int(ledCount/9);
-    for (int i = 0; i < ledCount; i++ ) {
+    int N9 = int(longestTube/9);
+    for (int i = 0; i < longestTube; i++ ) {
         if (i >= 0 && i < N9)
             {setPixel(i, 255,147,41);} //-CANDLE - 1900
         if (i >= N9 && i < N9*2)
@@ -981,7 +1092,7 @@ void white_temps() {
                 {setPixel(i, 255,255,255);} //-DIRECT SUN - 6000
         if (i >= N9*7 && i < N9*8)
                 {setPixel(i, 201,226,255);} //-OVERCAST SKY - 7000
-        if (i >= N9*8 && i < ledCount)
+        if (i >= N9*8 && i < longestTube)
                 {setPixel(i, 64,156,255);} //-CLEAR BLUE SKY - 20000
     }
 }
@@ -989,7 +1100,7 @@ void white_temps() {
 
 void color_loop_vardelay() { //-COLOR LOOP (SINGLE LED) w/ VARIABLE DELAY
     idex++;
-    if (idex > ledCount) {idex = 0;}
+    if (idex > longestTube) {idex = 0;}
     
     CRGB acolor;
     HSVtoRGB(0, 255, 255, acolor);
@@ -997,7 +1108,7 @@ void color_loop_vardelay() { //-COLOR LOOP (SINGLE LED) w/ VARIABLE DELAY
     //int di = abs(TOP_INDEX - idex); //-DISTANCE TO CENTER
     //int t = constrain((10/di)*10, 10, 500); //-DELAY INCREASE AS INDEX APPROACHES CENTER (WITHIN LIMITS)
     
-    for(int i = 0; i < ledCount; i++ ) {
+    for(int i = 0; i < longestTube; i++ ) {
         if (i == idex) {
             setPixel(i, acolor);
         }
@@ -1011,7 +1122,7 @@ void color_loop_vardelay() { //-COLOR LOOP (SINGLE LED) w/ VARIABLE DELAY
 void strip_march_cw(int idelay) { //-MARCH STRIP C-W
     copy_led_array();
     int iCCW;
-    for(int i = 0; i < ledCount; i++ ) {  //-GET/SET EACH LED COLOR FROM CCW LED
+    for(int i = 0; i < longestTube; i++ ) {  //-GET/SET EACH LED COLOR FROM CCW LED
         iCCW = adjacent_ccw(i);
         setPixel(i, ledsX[iCCW]);
     }
@@ -1021,7 +1132,7 @@ void strip_march_cw(int idelay) { //-MARCH STRIP C-W
 void strip_march_ccw(int idelay) { //-MARCH STRIP C-W
     copy_led_array();
     int iCW;
-    for(int i = 0; i < ledCount; i++ ) {  //-GET/SET EACH LED COLOR FROM CCW LED
+    for(int i = 0; i < longestTube; i++ ) {  //-GET/SET EACH LED COLOR FROM CCW LED
         iCW = adjacent_cw(i);
         setPixel(i, ledsX[iCW]);
     }
@@ -1047,7 +1158,7 @@ void pop_horizontal(int ahue, int idelay) {  //-POP FROM LEFT TO RIGHT UP THE RI
         }
     }
     
-    for(int i = 0; i < ledCount; i++ ) {
+    for(int i = 0; i < longestTube; i++ ) {
         if (i == ix) {
             setPixel(i, acolor);
         }
@@ -1062,9 +1173,9 @@ void quad_bright_curve(int ahue, int idelay) {  //-QUADRATIC BRIGHTNESS CURVER
     CRGB acolor;
     int ax;
     
-    for(int x = 0; x < ledCount; x++ ) {
+    for(int x = 0; x < longestTube; x++ ) {
         if (x <= TOP_INDEX) {ax = x;}
-        else if (x > TOP_INDEX) {ax = ledCount-x;}
+        else if (x > TOP_INDEX) {ax = longestTube-x;}
         
         int a = 1; int b = 1; int c = 0;
         
@@ -1103,10 +1214,10 @@ void flame() {
 
 
 void radiation(int ahue, int idelay) { //-SORT OF RADIATION SYMBOLISH-
-    //int N2 = int(ledCount/2);
-    int N3 = int(ledCount/3);
-    int N6 = int(ledCount/6);
-    int N12 = int(ledCount/12);
+    //int N2 = int(longestTube/2);
+    int N3 = int(longestTube/3);
+    int N6 = int(longestTube/6);
+    int N12 = int(longestTube/12);
     CRGB acolor;
     
     for(int i = 0; i < N6; i++ ) { //-HACKY, I KNOW...
@@ -1114,9 +1225,9 @@ void radiation(int ahue, int idelay) { //-SORT OF RADIATION SYMBOLISH-
         if (tcount > 3.14) {tcount = 0.0;}
         ibright = int(sin(tcount)*255);
         
-        int j0 = (i + ledCount - N12) % ledCount;
-        int j1 = (j0+N3) % ledCount;
-        int j2 = (j1+N3) % ledCount;
+        int j0 = (i + longestTube - N12) % longestTube;
+        int j1 = (j0+N3) % longestTube;
+        int j2 = (j1+N3) % longestTube;
         HSVtoRGB(ahue, 255, ibright, acolor);
         setPixel(j0,acolor);
         setPixel(j1,acolor);
@@ -1130,7 +1241,7 @@ void radiation(int ahue, int idelay) { //-SORT OF RADIATION SYMBOLISH-
 void sin_bright_wave(int ahue, int idelay) {
     CRGB acolor;
     
-    for(int i = 0; i < ledCount; i++ ) {
+    for(int i = 0; i < longestTube; i++ ) {
         tcount = tcount + .1;
         if (tcount > 3.14) {tcount = 0.0;}
         ibright = int(sin(tcount)*255);
@@ -1193,8 +1304,42 @@ boolean checkButton(byte whichButton)
     return false;
 }
 
+//test show all animations
+void loop()
+{
+ // Call the current pattern function once, updating the 'leds' array
+  gPatterns[gCurrentPatternNumber]();
+  currentPalette = HeatColors_p;
+
+  //  fillnoise8();      
+
+  // send the 'leds' array out to the actual LED strip
+  showLeds();  
+  // insert a delay to keep the framerate modest
+  FastLED.delay(1000/FRAMES_PER_SECOND); 
+
+  // do some periodic updates
+  EVERY_N_MILLISECONDS( 20 ) { gHue++; } // slowly cycle the "base color" through the rainbow
+  EVERY_N_SECONDS( 60 ) { nextPattern(); } // change patterns periodically
+}
+
+#define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
+
+void nextPattern()
+{
+  // add one to the current pattern number, and wrap around at the end
+  gCurrentPatternNumber = (gCurrentPatternNumber + 1) % ARRAY_SIZE( gPatterns);
+}
+
+void rainbowWithGlitter() 
+{
+  // built-in FastLED rainbow, plus some random sparkly glitter
+  rotatingRainbow();
+  addGlitter(80);
+}
+
 //------------------MAIN LOOP------------------
-void loop() {
+void looper() {
   // Add entropy to random number generator; we use a lot of it.
   random16_add_entropy( random());
 
@@ -1366,12 +1511,15 @@ void debugColors()
 void Fire2012WithPalette()
 {
     fillSolid(CRGB::Black);
-    int height = ledCount / 2;
+    int height = longestTube / 2;
 
     // COOLING: How much does the air cool as it rises?
     // Less cooling = taller flames.  More cooling = shorter flames.
     // Default 55, suggested range 20-100 
-    byte COOLING = mux.getCutOff();
+
+    //TEMP: disable whien not in dashboard
+//    byte COOLING = mux.getCutOff();
+    byte COOLING = 75;
     if (COOLING < 10)
         COOLING = 75;
 
@@ -1382,7 +1530,7 @@ void Fire2012WithPalette()
     const byte SPARKING = 200;
 
     // Array of temperature readings at each simulation cell
-    static byte heat[ledCount];
+    static byte heat[longestTube];
 
 
   // Step 1.  Cool down every cell a little
@@ -1408,7 +1556,7 @@ void Fire2012WithPalette()
       // for best results with color palettes.
       byte colorindex = scale8( heat[j], 240);
 
-      for(byte iStrip = 0;iStrip<numStrips;iStrip++)
+      for(byte iStrip = 0;iStrip<numTubes;iStrip++)
           leds[iStrip][j] = ColorFromPalette( currentPalette, colorindex);
     }
     
@@ -1418,10 +1566,10 @@ void Fire2012WithPalette()
 // mirrors the array of leds (nice for the fire since I want it to be symmetrical
 void mirror()
 {
-  for(byte col = 0;col < numStrips;col++)
+  for(byte col = 0;col < numTubes;col++)
   {
-    for(int row = 0;row < ledCount/2;row++)
-      leds[col][ledCount - row -1] = leds[col][row];  
+    for(int row = 0;row < longestTube/2;row++)
+      leds[col][longestTube - row -1] = leds[col][row];  
   }
 }
 
@@ -1435,9 +1583,9 @@ void fillnoise8() {
     dataSmoothing = 200 - (speed * 4);
   }
   
-  for(int i = 0; i < numStrips; i++) {
+  for(int i = 0; i < numTubes; i++) {
     int ioffset = scale * i;
-    for(int j = 0; j < ledCount; j++) {
+    for(int j = 0; j < longestTube; j++) {
       int joffset = scale * j;
       
       uint8_t data = inoise8(noiseX + ioffset,noiseY + joffset,noiseZ);
@@ -1469,14 +1617,14 @@ void mapNoiseToLEDsUsingPalette()
 {
   static uint8_t ihue=0;
   
-  for(int i = 0; i < numStrips; i++) {
-    for(int j = 0; j < ledCount; j++) {
+  for(int i = 0; i < numTubes; i++) {
+    for(int j = 0; j < longestTube; j++) {
       // We use the value at the (i,j) coordinate in the noise
       // array for our brightness, and the flipped value from (j,i)
       // for our pixel's index into the color palette.
 
       uint8_t index = noise[i][j];
-      uint8_t bri =   noise[numStrips - i - 1][ledCount - j - 1];
+      uint8_t bri =   noise[numTubes - i - 1][longestTube - j - 1];
 
       // if this palette is a 'loop', add a slowly-changing base value
       if( colorLoop) { 
@@ -1701,4 +1849,6 @@ void cushions()
 void unrecognized(const char *command) {
     Serial.println("nothin fo ya...");
 }
+
+
 
