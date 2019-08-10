@@ -34,11 +34,10 @@ const byte tubes[numVirtualStrips]
   9,  // 13 
   5,  // 14 buffer
   10, // 15 buffer
-  14  // 16 buffer
+  14  // 16 buffer 
 } ;
 
 const byte UPDATES_PER_SECOND =200;
-const byte BRIGHTNESS = 96;
 const byte FRAMES_PER_SECOND = 120;
 
 // the front of the car has shorter lights
@@ -54,7 +53,7 @@ int FIRST_THIRD = int(longestTube/3);
 int SECOND_THIRD = FIRST_THIRD * 2;
 int EVENODD = longestTube%2;
 
-byte tailLights = 12;
+byte tailLights = 6;
 //byte cushionsBack = 13;
 //byte cushionFront = 14;
 
@@ -121,10 +120,10 @@ SimplePatternList gPatterns = {
     rotatingRainbow, 
     rainbowWithGlitter, 
     spiralRainbow,
+    mapNoiseToLEDsUsingPalette,
     police_lightsALL,
     sinelon, 
-    juggle, 
-    mapNoiseToLEDsUsingPalette
+    juggle
 };
 
 uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
@@ -146,8 +145,14 @@ void setup()
 {
   delay(1000);
             
-  LEDS.addLeds<WS2811_PORTDC,16>(*realLeds, ledCount);
+  LEDS.addLeds<WS2811_PORTDC,16, GRB>(*realLeds, ledCount);
+  LEDS.setBrightness(16);
   LEDS.setBrightness(32);
+
+  pinMode(3, OUTPUT);
+  pinMode(4, OUTPUT);
+
+  digitalWrite(3, LOW);
         
   currentPalette = HeatColors_p;
   currentBlending = LINEARBLEND;
@@ -188,21 +193,10 @@ void showLeds()
   for(int currentStrip = 0; currentStrip < numStrips; currentStrip++) 
   {
     byte fastLedStrip = tubes[currentStrip];
-    Serial.print("Strip ");
-    Serial.print(currentStrip);
-    Serial.print(" FastLed ");
-    Serial.print(fastLedStrip);
-    Serial.println();
-    Serial.println();
 
     // the 2nd light strip is connected to the end of the 3rd light strip
     if(currentStrip == 0)
     {
-    Serial.print(" 0 Strip ");
-    Serial.print(currentStrip);
-    Serial.print(" FastLed ");
-    Serial.print(fastLedStrip);
-    Serial.println();
         // make the end of the tube white for debugging purposes
         //realLeds[currentStrip][tubeLengths[2]] = CRGB::White;
 
@@ -212,9 +206,10 @@ void showLeds()
             realLeds[fastLedStrip][iLed] = leds[currentStrip][iLed];
         }
 
+        // this one is backwards
         for(int iLed = 0; iLed <= tubeLengths[1]; iLed++) 
         {
-            realLeds[fastLedStrip][tubeLengths[2]+iLed] = leds[1][iLed];
+            realLeds[fastLedStrip][tubeLengths[1] + tubeLengths[2]-iLed] = leds[1][iLed];
         }
 
       //leds[tubes[currentTube]][tubeLengths[1]+ tubeLengths[2]] = CRGB::White;
@@ -229,12 +224,17 @@ void showLeds()
             realLeds[fastLedStrip][iLed] = leds[currentStrip][iLed];
         }
 
+        // this one is backwards
         for(int iLed = 0; iLed <= tubeLengths[0]; iLed++) 
         {
-            realLeds[fastLedStrip][tubeLengths[3]+iLed] = leds[0][iLed];
+            realLeds[fastLedStrip][tubeLengths[0] + tubeLengths[3]-iLed] = leds[0][iLed];
         }
       //leds[tubes[currentTube]][tubeLengths[3]] = CRGB::White;
       //leds[tubes[currentTube]][tubeLengths[0]+tubeLengths[3]] = CRGB::White;
+    }
+    if (currentStrip == tailLights)
+    {
+        // do nothing;
     }
     else
     {
@@ -244,8 +244,6 @@ void showLeds()
         }
       //leds[tubes[currentTube]][tubeLengths[currentTube+2]] = CRGB::White;
     }
-
-    Serial.println();
   }
 
   LEDS.show();
@@ -1304,23 +1302,89 @@ boolean checkButton(byte whichButton)
     return false;
 }
 
-//test show all animations
 void loop()
 {
+
+    static int iDelay = 0;
+    if (iDelay++ > 10)
+    {    
+        iDelay = 0;
+        long cutoff = mux.getCutOff();
+        //mux.prettyPrint();
+        mux.print();
+        analogWrite(4, cutoff/20);
+
+    }
+
+//    switch( mux.getDial())
+    switch(4)
+    {
+        // if dialEmission then Fire!
+        case 1:
+            if (mux.isIntensifierOn())
+            {
+                currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
+            }
+            else
+            {
+                currentPalette = HeatColors_p;
+            }
+            Fire2012WithPalette();
+            break;
+        case 2: // if dyn-low then 
+            if (mux.isIntensifierOn())
+                rainbowWithGlitter();
+            else
+                rotatingRainbow(); 
+            break;
+        case 3: // dyn-medium
+            if (mux.isIntensifierOn())
+                sinelon();
+            else
+                juggle();
+            break;
+        case 4: // dyn-high
+            static bool lastTest = false;
+            static bool lt = false;
+            lt = mux.isIntensifierOn();
+
+            if (lt != lastTest)
+            {
+                if (lt) 
+                {
+                    ChangePaletteAndSettingsPeriodically();                
+                }
+                lastTest = mux.isIntensifierOn();            
+            }
+
+            // generate noise data
+            fillnoise8();
+            
+            // convert the noise data to colors in the LED array
+            // using the current palette
+            mapNoiseToLEDsUsingPalette();
+            //mirror();
+            break;
+    }
+
  // Call the current pattern function once, updating the 'leds' array
-  gPatterns[gCurrentPatternNumber]();
+  //gPatterns[gCurrentPatternNumber]();
   currentPalette = HeatColors_p;
 
   //  fillnoise8();      
 
   // send the 'leds' array out to the actual LED strip
-  showLeds();  
+    pulseJets();
+
+
+    debugColors(); // temporarily let me see which hoop is which
+    showLeds();  
+
   // insert a delay to keep the framerate modest
   FastLED.delay(1000/FRAMES_PER_SECOND); 
 
   // do some periodic updates
   EVERY_N_MILLISECONDS( 20 ) { gHue++; } // slowly cycle the "base color" through the rainbow
-  EVERY_N_SECONDS( 60 ) { nextPattern(); } // change patterns periodically
 }
 
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
@@ -1336,97 +1400,6 @@ void rainbowWithGlitter()
   // built-in FastLED rainbow, plus some random sparkly glitter
   rotatingRainbow();
   addGlitter(80);
-}
-
-//------------------MAIN LOOP------------------
-void looper() {
-  // Add entropy to random number generator; we use a lot of it.
-  random16_add_entropy( random());
-
-  static int iDelay = 0;
-  if (iDelay++ > 10)
-  {    
-    iDelay = 0;
-    mux.getCutOff();
-    mux.print();
-  }
-  
-  if (mux.isEmissionOn())
-  {
-    LEDS.setBrightness(32);
-  } 
-  else
-  {
-    LEDS.setBrightness(200);
-  }
-
-  switch(mux.getDial())
-  {
-    case CMux::dialCont:
-    //  explosion();
-      rotatingRainbow();
-      break;
-    case CMux::dialEmission:
-      // Periodically choose a new palette, speed, and scale
-        static bool lastTest = false;
-        static bool lt = false;
-        lt = mux.isLifeTestOn();
-
-        if (lt != lastTest)
-        {
-            if (lt) 
-            {
-              ChangePaletteAndSettingsPeriodically();                
-            }
-          lastTest = mux.isLifeTestOn();            
-        }
-
-      // generate noise data
-      fillnoise8();
-      
-      // convert the noise data to colors in the LED array
-      // using the current palette
-      mapNoiseToLEDsUsingPalette();
-      //mirror();
-      break;
-    case CMux::dialLow:
-
-      if (mux.isIntensifierOn())
-      {
-        currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Purple, CRGB::Fuchsia,  CRGB::Red);
-      }
-      else if (mux.isLifeTestOn())
-      {
-        currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
-      }
-
-      else
-      {
-        currentPalette = HeatColors_p;
-      }
-      Fire2012WithPalette();
-      break;
-    case CMux::dialMedium:
-      spiralRainbow();
-      break;
-    case CMux::dialHigh:
-        if (mux.isLifeTestOn())
-            police_lightsALL();
-        else
-          sin_bright_wave(mux.getCutOff(), 35);
-      break;
-  }
-
- // rotatingRainbow();
-
-  //pulseJets();
-  //cushions();
-
-
-  //debugColors();
-
-    showLeds();
-    FastLED.delay(1000/UPDATES_PER_SECOND);
 }
 
 void flashSmile()
@@ -1462,7 +1435,11 @@ void debugColors()
   {
     // make the last one blue
     leds[i][ledCount-1] = CRGB::Blue;
+
+    // make the middle one white
     leds[i][ledCount/2] = CRGB::White;
+
+    // purple for every 10 lights
     for(int l = 0;l<ledCount;l++)
     {
       if (l % 10 == 0)
@@ -1471,11 +1448,11 @@ void debugColors()
   }
 
   for(byte s = 0;s < numStrips;s++)
-    leds[s][0] = CRGB::Yellow;
+    leds[s][0] = CRGB::Purple;
 
   for(byte s = 0;s < numStrips;s++)
   {
-    for (int h = 0; h < s; h++)    
+    for (int h = 1; h < s+1; h++)    
         leds[s][h] = CRGB::Green;
   }
 
@@ -1518,10 +1495,10 @@ void Fire2012WithPalette()
     // Default 55, suggested range 20-100 
 
     //TEMP: disable whien not in dashboard
-//    byte COOLING = mux.getCutOff();
-    byte COOLING = 75;
+    byte COOLING = mux.getCutOff();
+    //byte COOLING = 75;
     if (COOLING < 10)
-        COOLING = 75;
+        COOLING = 255;
 
 
     // SPARKING: What chance (out of 255) is there that a new spark will be lit?
@@ -1849,6 +1826,3 @@ void cushions()
 void unrecognized(const char *command) {
     Serial.println("nothin fo ya...");
 }
-
-
-
