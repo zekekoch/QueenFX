@@ -1,12 +1,12 @@
 #define  FASTLED_ALLOW_INTERRUPTS 0
 #include <FastLED.h>
-#include "Mux.h"
+#include "Buttons.h"
 
 //const int realLedCount = 252;
 //const byte realLedCount = 192;
 const int ledCount = 298;
 const int longestTube = 273;
-
+  
 // there are 14 led strips (12 on tubes, one for the tail lights and one for the dashboard)
 const byte numStrips = 14;
 CRGB leds[numStrips][ledCount];
@@ -43,8 +43,7 @@ const byte FRAMES_PER_SECOND = 120;
 // the front of the car has shorter lights
 const int tubeLengths[numStrips] = {73, 136, 162, 199, 224, 247, 273, 273, 273, 273, 273, 273, 273, 273} ;
 
-
-CMux mux;
+CButtons *buttons = new CButtons;
 
 // globals for FX animations
 int BOTTOM_INDEX = 0;
@@ -665,7 +664,7 @@ void rotatingRainbow()
     for(int i = 0;i < numTubes;i++)
     {
         fill_rainbow(leds[i], longestTube, hue++, 10);
-        if(mux.isIntensifierOn())  
+        if(buttons->isIntensifierOn())  
             addGlitter(255);
     }
 }
@@ -685,7 +684,7 @@ void spiralRainbow()
     if (iStrip == numTubes)
         iStrip = 0;
 
-    hsv.hue += (mux.getCutOff() / 16) + 1;
+    hsv.hue += 10;
 
     for(int i = 0; i < numTubes;i++)
     {
@@ -1295,7 +1294,7 @@ boolean checkButton(byte whichButton)
     {
         if (0 == whichButton)
         {
-            return mux.isIntensifierOn();
+            return buttons->isIntensifierOn();
         }
     }
     
@@ -1304,67 +1303,58 @@ boolean checkButton(byte whichButton)
 
 void loop()
 {
+    buttons->refresh();
 
-    static int iDelay = 0;
-    if (iDelay++ > 10)
-    {    
-        iDelay = 0;
-        long cutoff = mux.getCutOff();
-        //mux.prettyPrint();
-        mux.print();
-        analogWrite(4, cutoff/20);
 
-    }
-
-//    switch( mux.getDial())
-    switch(4)
+    if(buttons->state(15))
     {
-        // if dialEmission then Fire!
-        case 1:
-            if (mux.isIntensifierOn())
-            {
-                currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
-            }
-            else
-            {
-                currentPalette = HeatColors_p;
-            }
-            Fire2012WithPalette();
-            break;
-        case 2: // if dyn-low then 
-            if (mux.isIntensifierOn())
+
+        if (buttons->state(14))
+        {
+            currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
+        }
+        else
+        {
+            currentPalette = HeatColors_p;
+        }
+        Fire2012WithPalette();
+    } 
+    else if (buttons->state(13))
+    {
+        if (buttons->state(14))
                 rainbowWithGlitter();
-            else
+        else
                 rotatingRainbow(); 
-            break;
-        case 3: // dyn-medium
-            if (mux.isIntensifierOn())
+    }
+    else if (buttons->state(12))
+    {
+        if (buttons->state(14))
                 sinelon();
-            else
+        else
                 juggle();
-            break;
-        case 4: // dyn-high
-            static bool lastTest = false;
-            static bool lt = false;
-            lt = mux.isIntensifierOn();
+    }
+    else if (buttons->state(11))
+    {
+        static bool lastTest = false;
+        static bool lt = false;
+        lt = buttons->isIntensifierOn();
 
-            if (lt != lastTest)
+        if (lt != lastTest)
+        {
+            if (lt) 
             {
-                if (lt) 
-                {
-                    ChangePaletteAndSettingsPeriodically();                
-                }
-                lastTest = mux.isIntensifierOn();            
+                ChangePaletteAndSettingsPeriodically();                
             }
+            lastTest = buttons->isIntensifierOn();            
+        }
 
-            // generate noise data
-            fillnoise8();
-            
-            // convert the noise data to colors in the LED array
-            // using the current palette
-            mapNoiseToLEDsUsingPalette();
-            //mirror();
-            break;
+        // generate noise data
+        fillnoise8();
+        
+        // convert the noise data to colors in the LED array
+        // using the current palette
+        mapNoiseToLEDsUsingPalette();
+        //mirror();
     }
 
  // Call the current pattern function once, updating the 'leds' array
@@ -1374,10 +1364,10 @@ void loop()
   //  fillnoise8();      
 
   // send the 'leds' array out to the actual LED strip
-    pulseJets();
+    //pulseJets();
 
 
-    debugColors(); // temporarily let me see which hoop is which
+    //debugColors(); // temporarily let me see which hoop is which
     showLeds();  
 
   // insert a delay to keep the framerate modest
@@ -1494,11 +1484,7 @@ void Fire2012WithPalette()
     // Less cooling = taller flames.  More cooling = shorter flames.
     // Default 55, suggested range 20-100 
 
-    //TEMP: disable whien not in dashboard
-    byte COOLING = mux.getCutOff();
-    //byte COOLING = 75;
-    if (COOLING < 10)
-        COOLING = 255;
+    byte COOLING = 100;
 
 
     // SPARKING: What chance (out of 255) is there that a new spark will be lit?
@@ -1696,12 +1682,10 @@ CRGB getFlameColor()
     //tail lights are GRB, other lights arte RGB
     byte offset = 48;
 
-    offset = mux.getCutOff();
-    Serial.println(offset);
+  //  Serial.println(offset);
   byte seed = random(0+offset,50+offset);
   if (seed <30+offset)
     ;
-
   else if (seed < 45+offset)
     seed = seed - 30+offset;
   else 
@@ -1759,7 +1743,7 @@ CRGB getFlameColorFromPalette()
     };
 
 
-    if (mux.isLifeTestOn())
+    if (buttons->isLifeTestOn())
         return ColorFromPalette(coldFlames, random8(), 128, LINEARBLEND);
     else
         return ColorFromPalette(reverseFlames, random8(), 128, LINEARBLEND);
