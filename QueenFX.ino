@@ -2,6 +2,11 @@
 #include <FastLED.h>
 #include "Buttons.h"
 
+// Use qsuba for smooth pixel colouring and qsubd for non-smooth pixel colouring
+#define qsubd(x, b)  ((x>b)?b:0)    // Digital unsigned subtraction macro. if result <0, then => 0. Otherwise, take on fixed value.
+#define qsuba(x, b)  ((x>b)?x-b:0)  // Analog Unsigned subtraction macro. if result <0, then => 0
+
+
 //const int realLedCount = 252;
 //const byte realLedCount = 192;
 const int ledCount = 298;
@@ -76,7 +81,10 @@ int lcount = 0;      //-ANOTHER COUNTING VAR
 
 // color palette related stuff
 CRGBPalette16 currentPalette;
-TBlendType    currentBlending;
+CRGBPalette16 targetPalette;
+TBlendType currentBlending = LINEARBLEND;
+
+
 extern CRGBPalette16 myRedWhiteBluePalette;
 extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
 
@@ -157,10 +165,11 @@ void setup()
   currentBlending = LINEARBLEND;
 
   Serial.begin(57600);
-  Serial.println(F("https://github.com/zekekoch/QueenFX"));
+  Serial.flush();
   fillSolid(0,0,0); //-BLANK STRIP
     
   showLeds();
+  Serial.println("https://github.com/zekekoch/QueenFX");
 }
 
 // roughly map leds dealing with the fact that
@@ -402,8 +411,6 @@ void SetupAmericaPalette()
     );
 }
 
-
-
 // This example shows how to set up a static color palette
 // which is stored in PROGMEM (flash), which is almost always more
 // plentiful than RAM.  A static PROGMEM palette like this
@@ -439,6 +446,12 @@ void setPixel(int adex, CRGB c) {
     {
         leds[i][adex] = c;
     }
+}
+
+// assumes all of the strips have the same stuff on them
+CRGB getPixel(int pixel)
+{
+    return leds[0][pixel];
 }
 
 //-FIND INDEX OF HORIZONAL OPPOSITE LED
@@ -657,6 +670,86 @@ void printLed(int s, byte l)
     Serial.print(ledBuffer[s][l]);
     Serial.print("]");
 }
+
+void plasma() 
+{ // This is the heart of this program. Sure is short. . . and fast.
+  int thisPhase = beatsin8(6,-64,64);                           // Setting phase change for a couple of waves.
+  int thatPhase = beatsin8(7,-64,64);
+
+  // For each of the LED's in the strand, set a brightness based on a wave as follows:
+  for (int k=0; k<longestTube; k++) {                              
+    int colorIndex = cubicwave8((k*23)+thisPhase)/2 + cos8((k*15)+thatPhase)/2;           // Create a wave and add a phase change and add another wave with its own phase change.. Hey, you can even change the frequencies if you wish.
+    int thisBright = qsuba(colorIndex, beatsin8(7,0,96));                                 // qsub gives it a bit of 'black' dead space by setting sets a minimum value. If colorIndex < current value of beatsin8(), then bright = 0. Otherwise, bright = colorIndex..
+
+
+    // Let's now add the foreground colour. setpixel sets the same animation on all tubes
+    setPixel(k,ColorFromPalette(currentPalette, colorIndex, thisBright, currentBlending));
+  }
+
+} // plasma()
+
+void blendwave() 
+{
+  static CRGB clr1;
+  static CRGB clr2;
+  static uint8_t speed;
+  static uint8_t loc1;
+
+  
+    for(int i = 0;i < numTubes;i++)
+    {
+  speed = beatsin8(6,0,255);
+
+  clr1 = blend(CHSV(beatsin8(3,0,255),255,255), CHSV(beatsin8(4,0,255),255,255), speed);
+  clr2 = blend(CHSV(beatsin8(4,0,255),255,255), CHSV(beatsin8(3,0,255),255,255), speed);
+
+  loc1 = beatsin8(10,0,longestTube-1);
+
+        fill_gradient_RGB(leds[i], 0, clr2, loc1, clr1);
+        fill_gradient_RGB(leds[i], loc1, clr2, longestTube-1, clr1);
+    }
+} // blendwave()
+
+void ripple() {
+    static uint8_t colour;                                               // Ripple colour is randomized.
+    static int center = 0;                                               // Center of the current ripple.
+    static int step = -1;                                                // -1 is the initializing step.
+    static uint8_t myfade = 255;                                         // Starting brightness.
+    const byte maxsteps = 16;                                           // Case statement wouldn't allow a variable.
+
+    uint8_t bgcol = 0;                                            // Background colour rotates.
+
+    for(byte iStrip =0;iStrip < numTubes;iStrip++)
+    {
+        fadeToBlackBy( leds[iStrip], longestTube, 20);
+    } 
+    
+    switch (step) {
+        case -1:                                                          // Initialize ripple variables.
+        center = random(longestTube);
+        colour = random8();
+        step = 0;
+        break;
+
+        case 0:
+        setPixel(center,ColorFromPalette(currentPalette, colour, myfade, currentBlending));
+        
+        step ++;
+        break;
+
+        case maxsteps:                                                    // At the end of the ripples.
+        step = -1;
+        break;
+
+        default:                                                          // Middle of the ripples.
+        // Simple wrap from Marc Miller
+        setPixel((center + step + longestTube) % longestTube, getPixel((center + step + longestTube) % longestTube) + ColorFromPalette(currentPalette, colour, myfade/step*2, currentBlending));       
+        setPixel((center - step + longestTube) % longestTube, getPixel((center + step + longestTube) % longestTube) + ColorFromPalette(currentPalette, colour, myfade/step*2, currentBlending));
+        step ++;                                                         // Next step.
+        break;  
+    } // switch step
+  
+} // ripple()
 
 void rotatingRainbow()
 {
@@ -1356,6 +1449,52 @@ void loop()
         mapNoiseToLEDsUsingPalette();
         //mirror();
     }
+    else if (buttons->state(10))
+    {
+        EVERY_N_MILLISECONDS(50) 
+        {   // FastLED based non-blocking delay to update/display the sequence.
+            plasma();
+        }
+
+        EVERY_N_MILLISECONDS(1000) 
+        {
+            Serial.println(LEDS.getFPS()); // Optional check of our fps.
+        }
+
+        EVERY_N_MILLISECONDS(100) 
+        {
+            uint8_t maxChanges = 24; 
+            nblendPaletteTowardPalette(currentPalette, targetPalette, maxChanges);   // AWESOME palette blending capability.
+        }
+
+        EVERY_N_SECONDS(5) 
+        {   // Change the target palette to a random one every 5 seconds.
+            uint8_t baseC = random8();                         // You can use this as a baseline colour if you want similar hues in the next line.
+            targetPalette = CRGBPalette16(CHSV(baseC+random8(32), 192, random8(128,255)), CHSV(baseC+random8(32), 255, random8(128,255)), CHSV(baseC+random8(32), 192, random8(128,255)), CHSV(baseC+random8(32), 255, random8(128,255)));
+        }
+    } else if (buttons->state(9))
+    {
+        blendwave();
+    } else if (buttons->state(8))
+    {
+        const int thisdelay = 60;                                          // Standard delay value.
+
+        EVERY_N_MILLISECONDS(100) 
+        {
+            uint8_t maxChanges = 24; 
+            nblendPaletteTowardPalette(currentPalette, targetPalette, maxChanges);   // AWESOME palette blending capability.
+        }
+
+        EVERY_N_SECONDS(3) 
+        {
+            targetPalette = CRGBPalette16(CHSV(random8(), 255, 32), CHSV(random8(), random8(64)+192, 255), CHSV(random8(), 255, 32), CHSV(random8(), 255, 255)); 
+        }
+
+        EVERY_N_MILLISECONDS(thisdelay) 
+        {                                   // FastLED based non-blocking delay to update/display the sequence.
+            ripple();
+        }
+    }
 
  // Call the current pattern function once, updating the 'leds' array
   //gPatterns[gCurrentPatternNumber]();
@@ -1790,21 +1929,6 @@ void bigSmile()
   realLeds[tailLights][49] = CRGB::HotPink;
 
 }
-
-/*
-void cushions()
-{
-  static byte currentLed = 0;
-  currentLed++;
-  if (currentLed >= realLedCount -1)
-    currentLed = 0;
-
-  realLeds[cushionsBack][currentLed] = CRGB::Red;
-  realLeds[cushionsBack][realLedCount -currentLed] = CRGB::Red;
-
-  fadeToBlackBy(realLeds[cushionsBack], realLedCount, 20);
-}
-*/
 
 // GETS CALLED BY SERIALCOMMAND WHEN NO MATCHING COMMAND
 void unrecognized(const char *command) {
