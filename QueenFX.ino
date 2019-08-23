@@ -1399,10 +1399,9 @@ void loop()
     buttons->refresh();
 
 
-    if(buttons->state(15))
+    if(buttons->state(0))
     {
-
-        if (buttons->state(14))
+        if (buttons->state(3))
         {
             currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
         }
@@ -1412,21 +1411,21 @@ void loop()
         }
         Fire2012WithPalette();
     } 
-    else if (buttons->state(13))
+    else if (buttons->state(1))
     {
         if (buttons->state(14))
                 rainbowWithGlitter();
         else
                 rotatingRainbow(); 
     }
-    else if (buttons->state(12))
+    else if (buttons->state(2))
     {
         if (buttons->state(14))
                 sinelon();
         else
                 juggle();
     }
-    else if (buttons->state(11))
+    else if (buttons->state(4))
     {
         static bool lastTest = false;
         static bool lt = false;
@@ -1449,7 +1448,7 @@ void loop()
         mapNoiseToLEDsUsingPalette();
         //mirror();
     }
-    else if (buttons->state(10))
+    else if (buttons->state(5))
     {
         EVERY_N_MILLISECONDS(50) 
         {   // FastLED based non-blocking delay to update/display the sequence.
@@ -1472,7 +1471,7 @@ void loop()
             uint8_t baseC = random8();                         // You can use this as a baseline colour if you want similar hues in the next line.
             targetPalette = CRGBPalette16(CHSV(baseC+random8(32), 192, random8(128,255)), CHSV(baseC+random8(32), 255, random8(128,255)), CHSV(baseC+random8(32), 192, random8(128,255)), CHSV(baseC+random8(32), 255, random8(128,255)));
         }
-    } else if (buttons->state(9))
+    } else if (buttons->state(6))
     {
         blendwave();
     } else if (buttons->state(8))
