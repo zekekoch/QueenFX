@@ -84,7 +84,6 @@ CRGBPalette16 currentPalette;
 CRGBPalette16 targetPalette;
 TBlendType currentBlending = LINEARBLEND;
 
-
 extern CRGBPalette16 myRedWhiteBluePalette;
 extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
 
@@ -1327,7 +1326,6 @@ void radiation(int ahue, int idelay) { //-SORT OF RADIATION SYMBOLISH-
 
 }
 
-
 void sin_bright_wave(int ahue, int idelay) {
     CRGB acolor;
     
@@ -1396,50 +1394,39 @@ boolean checkButton(byte whichButton)
 
 void loop()
 {
+    // first update all of my buttons to check if any are down
     buttons->refresh();
-
-
+    
+    
     if(buttons->state(0))
     {
-        if (buttons->state(3))
-        {
-            currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
-        }
-        else
-        {
-            currentPalette = HeatColors_p;
-        }
+        currentPalette = HeatColors_p;
         Fire2012WithPalette();
     } 
-    else if (buttons->state(1))
+    else if(buttons->state(1))
     {
-        if (buttons->state(14))
-                rainbowWithGlitter();
-        else
-                rotatingRainbow(); 
-    }
+        currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
+        Fire2012WithPalette();
+    } 
     else if (buttons->state(2))
     {
-        if (buttons->state(14))
-                sinelon();
-        else
-                juggle();
+        rotatingRainbow(); 
+    }
+    else if (buttons->state(3))
+    {
+        spiralRainbow();
     }
     else if (buttons->state(4))
     {
-        static bool lastTest = false;
-        static bool lt = false;
-        lt = buttons->isIntensifierOn();
-
-        if (lt != lastTest)
-        {
-            if (lt) 
-            {
-                ChangePaletteAndSettingsPeriodically();                
-            }
-            lastTest = buttons->isIntensifierOn();            
-        }
-
+        sinelon();
+    }
+    else if (buttons->state(5))
+    {
+        juggle();
+    }
+    else if (buttons->state(6))
+    {
+        currentPalette = HeatColors_p;
         // generate noise data
         fillnoise8();
         
@@ -1448,16 +1435,23 @@ void loop()
         mapNoiseToLEDsUsingPalette();
         //mirror();
     }
-    else if (buttons->state(5))
+    else if (buttons->state(7))
+    {
+        currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
+
+        // generate noise data
+        fillnoise8();
+        
+        // convert the noise data to colors in the LED array
+        // using the current palette
+        mapNoiseToLEDsUsingPalette();
+        mirror();
+    }
+    else if (buttons->state(8))
     {
         EVERY_N_MILLISECONDS(50) 
         {   // FastLED based non-blocking delay to update/display the sequence.
             plasma();
-        }
-
-        EVERY_N_MILLISECONDS(1000) 
-        {
-            Serial.println(LEDS.getFPS()); // Optional check of our fps.
         }
 
         EVERY_N_MILLISECONDS(100) 
@@ -1471,10 +1465,12 @@ void loop()
             uint8_t baseC = random8();                         // You can use this as a baseline colour if you want similar hues in the next line.
             targetPalette = CRGBPalette16(CHSV(baseC+random8(32), 192, random8(128,255)), CHSV(baseC+random8(32), 255, random8(128,255)), CHSV(baseC+random8(32), 192, random8(128,255)), CHSV(baseC+random8(32), 255, random8(128,255)));
         }
-    } else if (buttons->state(6))
+    } 
+    else if (buttons->state(9))
     {
         blendwave();
-    } else if (buttons->state(8))
+    } 
+    else if (buttons->state(10))
     {
         const int thisdelay = 60;                                          // Standard delay value.
 
@@ -1493,26 +1489,40 @@ void loop()
         {                                   // FastLED based non-blocking delay to update/display the sequence.
             ripple();
         }
+    } 
+    else if (buttons->state(11))
+    {
+        police_lightsALL();
+    } 
+    else if (buttons->state(12))
+    {
+        fourthOfJuly();
+    } 
+    else if (buttons->state(13))
+    {
+        explosion();
     }
+    else if (buttons->state(14))
+    {
+        //noise_noise1();
+    }
+    else
+    {
+        rotatingRainbow();
+    }
+    
+    //send the 'leds' array out to the actual LED strip
+    pulseJets();
 
- // Call the current pattern function once, updating the 'leds' array
-  //gPatterns[gCurrentPatternNumber]();
-  currentPalette = HeatColors_p;
 
-  //  fillnoise8();      
-
-  // send the 'leds' array out to the actual LED strip
-    //pulseJets();
-
-
-    //debugColors(); // temporarily let me see which hoop is which
+    debugColors(); // temporarily let me see which hoop is which
     showLeds();  
 
-  // insert a delay to keep the framerate modest
-  FastLED.delay(1000/FRAMES_PER_SECOND); 
+    // insert a delay to keep the framerate modest
+    FastLED.delay(1000/FRAMES_PER_SECOND); 
 
-  // do some periodic updates
-  EVERY_N_MILLISECONDS( 20 ) { gHue++; } // slowly cycle the "base color" through the rainbow
+    // do some periodic updates
+    EVERY_N_MILLISECONDS( 20 ) { gHue++; } // slowly cycle the "base color" through the rainbow
 }
 
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
@@ -1552,8 +1562,6 @@ void flashSmile()
   {
     pulseJets();
   }
-
-
 }
 
 void debugColors()
