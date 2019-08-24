@@ -107,6 +107,9 @@ uint16_t scale = 30; // scale is set dynamically once we've started up
 // This is the array that we keep our computed noise values in
 uint8_t noise[numTubes][longestTube];
 
+const uint8_t kMatrixWidth = numTubes;
+const uint8_t kMatrixHeight = longestTube/2;
+
 uint8_t colorLoop = 1;
 
 // i don't know why I need to declare these...
@@ -591,6 +594,22 @@ void addGlitter( fract8 chanceOfGlitter)
   if( random8() < chanceOfGlitter) {
     leds[random8(14)][ random16(longestTube) ] += CRGB::White;
   }
+}
+
+void DrawOneFrame( byte startHue8, int8_t yHueDelta8, int8_t xHueDelta8)
+{
+    byte lineStartHue = startHue8;
+    for( byte y = 0; y < kMatrixHeight; y++) 
+    {
+        lineStartHue += yHueDelta8;
+        byte pixelHue = lineStartHue;
+        for( byte x = 0; x < kMatrixWidth; x++) 
+        {
+            pixelHue += xHueDelta8;
+            leds[x][y] = CHSV( pixelHue, 255, 255);
+        }
+    }
+    mirror();
 }
 
 
@@ -1394,6 +1413,7 @@ boolean checkButton(byte whichButton)
 
 void loop()
 {
+    Serial.println("hi");
     // first update all of my buttons to check if any are down
     buttons->refresh();
     
@@ -1504,7 +1524,15 @@ void loop()
     }
     else if (buttons->state(14))
     {
-        //noise_noise1();
+        EVERY_N_MILLISECONDS(50)
+        {
+            uint32_t ms = millis();
+            //int32_t yHueDelta32 = ((int32_t)cos16( ms * 27 ) * (350 / kMatrixWidth));
+            //int32_t xHueDelta32 = ((int32_t)cos16( ms * 39 ) * (310 / kMatrixHeight));
+            int32_t yHueDelta32 = ((int32_t)cos16( ms * 27 ) * (400 / kMatrixWidth));
+            int32_t xHueDelta32 = ((int32_t)cos16( ms * 39 ) * (200 / kMatrixHeight));
+            DrawOneFrame( ms / 65536, yHueDelta32 / 32768, xHueDelta32 / 32768);
+        }
     }
     else
     {
