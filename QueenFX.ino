@@ -42,6 +42,11 @@ const byte tubes[numVirtualStrips]
   14  // 16 buffer 
 } ;
 
+byte tailLights = 12;
+//byte cushionsBack = 13;
+//byte cushionFront = 14;
+
+
 const byte UPDATES_PER_SECOND =200;
 const byte FRAMES_PER_SECOND = 120;
 
@@ -57,14 +62,11 @@ int FIRST_THIRD = int(longestTube/3);
 int SECOND_THIRD = FIRST_THIRD * 2;
 int EVENODD = longestTube%2;
 
-byte tailLights = 6;
-//byte cushionsBack = 13;
-//byte cushionFront = 14;
 
 CRGB ledsX[longestTube]; //-ARRAY FOR COPYING WHATS IN THE LED STRIP CURRENTLY (FOR CELL-AUTOMATA, ETC)
-const byte longestTubes[] = { };
+//const byte longestTubes[] = { };
 
-int ledMode = 23;      //-START IN DEMO MODE
+//int ledMode = 23;      //-START IN DEMO MODE
 //int ledMode = 5;
 
 //-PERISTENT VARS
@@ -204,9 +206,17 @@ void showLeds()
   {
     byte fastLedStrip = tubes[currentStrip];
 
+    Serial.print(currentStrip);
+    Serial.print(".");
+    Serial.print(fastLedStrip);
+    Serial.print(".");
+    Serial.print(tubeLengths[currentStrip]);
+    Serial.println();
+
     // the 2nd light strip is connected to the end of the 3rd light strip
     if(currentStrip == 0)
     {
+        Serial.println("cur = 0");
         // make the end of the tube white for debugging purposes
         //realLeds[currentStrip][tubeLengths[2]] = CRGB::White;
 
@@ -226,7 +236,8 @@ void showLeds()
     }
 
     // the 1st light strip is connected to the end of the 4th  light strip
-    if(currentStrip == 1)
+    //if(currentStrip == 1)
+    if(currentStrip == 1) // temporarily skip this
     {
         // first deal with the third tube
         for(int iLed = 0; iLed <= tubeLengths[3]; iLed++) 
@@ -244,7 +255,11 @@ void showLeds()
     }
     if (currentStrip == tailLights)
     {
-        // do nothing;
+        // skip the tailLights because I animate them 
+        // using pulsejets. I'm not sure why but maybe so that
+        // when the car is showing the same thing on all strips
+        // they don't also show that. it's not great seperation of 
+        // duties so I should fix this at some point 
     }
     else
     {
@@ -295,10 +310,12 @@ void oldShowLeds()
             break;
         }
     }
-    realLeds[15][0] = CRGB::Red;
-    realLeds[15][1] = CRGB::Blue;
-    realLeds[15][2] = CRGB::Green;
-    realLeds[15][3] = CRGB::White;
+
+    // these were for the dashboard
+    //realLeds[15][0] = CRGB::Red;
+    //realLeds[15][1] = CRGB::Blue;
+    //realLeds[15][2] = CRGB::Green;
+    //realLeds[15][3] = CRGB::White;
 
 
     LEDS.show();
@@ -1413,7 +1430,6 @@ boolean checkButton(byte whichButton)
 
 void loop()
 {
-    Serial.println("hi");
     // first update all of my buttons to check if any are down
     buttons->refresh();
     
@@ -1537,6 +1553,7 @@ void loop()
     else
     {
         rotatingRainbow();
+        mirror();
     }
     
     //send the 'leds' array out to the actual LED strip
@@ -1598,7 +1615,7 @@ void debugColors()
   for(int i = 0;i< numStrips;i++)
   {
     // make the last one blue
-    leds[i][ledCount-1] = CRGB::Blue;
+    leds[i][tubeLengths[i]-1] = CRGB::Blue;
 
     // make the middle one white
     leds[i][ledCount/2] = CRGB::White;
@@ -1928,8 +1945,8 @@ void pulseJets()
 {
   for (int i = 0;i<50;i++)
   {
-    realLeds[tailLights][i] = getFlameColorFromPalette();
-    realLeds[tailLights][99-i] = getFlameColorFromPalette();
+    realLeds[tubes[tailLights]][i] = getFlameColorFromPalette();
+    realLeds[tubes[tailLights]][99-i] = getFlameColorFromPalette();
 
     //leds[tailLights][i] += CRGB(redShift,0,0);
     //leds[tailLights][99-i]+= CRGB(redShift,0,0);
@@ -1938,17 +1955,17 @@ void pulseJets()
 
 void smile()
 {
-  fill_solid(realLeds[tailLights], ledCount, CRGB::Black);
+  fill_solid(realLeds[tubes[tailLights]], ledCount, CRGB::Black);
   //for (int i = 0; i<32;i++)
   //  leds[tailLights][i] = CRGB::Red;
 
   for (int i = 36; i<43;i++)
-    realLeds[tailLights][i] = CRGB::Red;
+    realLeds[tubes[tailLights]][i] = CRGB::Red;
 
-  realLeds[tailLights][44] = CRGB::Blue;
-  realLeds[tailLights][34] = CRGB::Blue;
+  realLeds[tubes[tailLights]][44] = CRGB::Blue;
+  realLeds[tubes[tailLights]][34] = CRGB::Blue;
 
-  realLeds[tailLights][49] = CRGB::Purple;
+  realLeds[tubes[tailLights]][49] = CRGB::Purple;
 }
 
 void bigSmile()
@@ -1956,16 +1973,16 @@ void bigSmile()
   fill_solid(realLeds[tailLights], ledCount, CRGB::Black);
 
   for (int i = 8; i<23;i++)
-    realLeds[tailLights][i] = CRGB::Red;
+    realLeds[tubes[tailLights]][i] = CRGB::Red;
 
-  realLeds[tailLights][3] = CRGB::Blue;
-  realLeds[tailLights][27] = CRGB::Blue;
+  realLeds[tubes[tailLights]][3] = CRGB::Blue;
+  realLeds[tubes[tailLights]][27] = CRGB::Blue;
 
-  realLeds[tailLights][49] = CRGB::HotPink;
+  realLeds[tubes[tailLights]][49] = CRGB::HotPink;
 
 }
 
 // GETS CALLED BY SERIALCOMMAND WHEN NO MATCHING COMMAND
-void unrecognized(const char *command) {
-    Serial.println("nothin fo ya...");
-}
+//void unrecognized(const char *command) {
+//    Serial.println("nothin fo ya...");
+//}
