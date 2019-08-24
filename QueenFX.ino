@@ -51,7 +51,8 @@ const byte UPDATES_PER_SECOND =200;
 const byte FRAMES_PER_SECOND = 120;
 
 // the front of the car has shorter lights
-const int tubeLengths[numStrips] = {73, 136, 162, 199, 224, 247, 273, 273, 273, 273, 273, 273, 273, 273} ;
+//const int tubeLengths[numStrips] = {73, 136, 162, 199, 224, 247, 273, 273, 273, 273, 273, 273, 273, 273} ;
+const int tubeLengths[numStrips] = {73, 136, 220, 247, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273} ;
 
 CButtons *buttons = new CButtons;
 
@@ -216,7 +217,6 @@ void showLeds()
     // the 2nd light strip is connected to the end of the 3rd light strip
     if(currentStrip == 0)
     {
-        Serial.println("cur = 0");
         // make the end of the tube white for debugging purposes
         //realLeds[currentStrip][tubeLengths[2]] = CRGB::White;
 
