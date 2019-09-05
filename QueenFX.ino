@@ -9,13 +9,14 @@
 
 //const int realLedCount = 252;
 //const byte realLedCount = 192;
+//const int ledCount = 298;
 const int ledCount = 298;
 const int longestTube = 273;
   
 // there are 14 led strips (12 on tubes, one for the tail lights and one for the dashboard)
 const byte numStrips = 14;
-CRGB leds[numStrips][ledCount];
-CRGB ledBuffer[numStrips][ledCount];
+CRGB leds[numStrips][longestTube];
+CRGB ledBuffer[numStrips][longestTube];
 
 // there are 14 tubes (the front is atached to strip 2 and the 2nd is attached to tube 1)
 const byte numTubes = 14;
@@ -51,8 +52,8 @@ const byte UPDATES_PER_SECOND =200;
 const byte FRAMES_PER_SECOND = 120;
 
 // the front of the car has shorter lights
-//const int tubeLengths[numStrips] = {73, 136, 162, 199, 224, 247, 273, 273, 273, 273, 273, 273, 273, 273} ;
-const int tubeLengths[numStrips] = {73, 136, 220, 247, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273} ;
+//const int tubeLengths[numStrips] = {73, 136, 220, 247, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273} ;
+const int tubeLengths[numStrips] = {79, 136, 220, 201, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273} ;
 
 CButtons *buttons = new CButtons;
 
@@ -202,17 +203,13 @@ int mapLed(int led, int from, int to)
 // phew
 void showLeds()
 {
-    // 14 virtual 
+  // 14 virtual strips
   for(int currentStrip = 0; currentStrip < numStrips; currentStrip++) 
   {
+      // map from my model (the order of the strips on the car) to fastled
+      // to be honest I don'tt know how fastled determines the order. it's not
+      // based on the pin numbers so it must have something to do with the dma
     byte fastLedStrip = tubes[currentStrip];
-
-    Serial.print(currentStrip);
-    Serial.print(".");
-    Serial.print(fastLedStrip);
-    Serial.print(".");
-    Serial.print(tubeLengths[currentStrip]);
-    Serial.println();
 
     // the 2nd light strip is connected to the end of the 3rd light strip
     if(currentStrip == 0)
@@ -236,24 +233,23 @@ void showLeds()
     }
 
     // the 1st light strip is connected to the end of the 4th  light strip
-    //if(currentStrip == 1)
-    if(currentStrip == 1) // temporarily skip this
+    else if(currentStrip == 1)
     {
+        // this one is backwards
+        for(int iLed = 0; iLed <= tubeLengths[0]; iLed++) 
+        {
+            realLeds[fastLedStrip][tubeLengths[0] + tubeLengths[3]-iLed] = leds[0][iLed];
+        }
+
         // first deal with the third tube
         for(int iLed = 0; iLed <= tubeLengths[3]; iLed++) 
         {
             realLeds[fastLedStrip][iLed] = leds[currentStrip][iLed];
         }
 
-        // this one is backwards
-        for(int iLed = 0; iLed <= tubeLengths[0]; iLed++) 
-        {
-            realLeds[fastLedStrip][tubeLengths[0] + tubeLengths[3]-iLed] = leds[0][iLed];
-        }
       //leds[tubes[currentTube]][tubeLengths[3]] = CRGB::White;
       //leds[tubes[currentTube]][tubeLengths[0]+tubeLengths[3]] = CRGB::White;
-    }
-    if (currentStrip == tailLights)
+    } else if (currentStrip == tailLights)
     {
         // skip the tailLights because I animate them 
         // using pulsejets. I'm not sure why but maybe so that
@@ -265,9 +261,15 @@ void showLeds()
     {
         for(int iLed = 0; iLed <= tubeLengths[currentStrip]; iLed++) 
         {
-            realLeds[fastLedStrip][iLed] = leds[currentStrip][iLed];
+            CRGB color = leds[currentStrip][iLed];
+            switch(currentStrip)
+            {
+                case 3:
+                    color = CRGB::Blue;
+                    break;
+            }
+            realLeds[fastLedStrip][iLed] = color;
         }
-      //leds[tubes[currentTube]][tubeLengths[currentTube+2]] = CRGB::White;
     }
   }
 
@@ -310,13 +312,6 @@ void oldShowLeds()
             break;
         }
     }
-
-    // these were for the dashboard
-    //realLeds[15][0] = CRGB::Red;
-    //realLeds[15][1] = CRGB::Blue;
-    //realLeds[15][2] = CRGB::Green;
-    //realLeds[15][3] = CRGB::White;
-
 
     LEDS.show();
 
