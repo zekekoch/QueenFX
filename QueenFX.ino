@@ -1,6 +1,6 @@
 #define  FASTLED_ALLOW_INTERRUPTS 0
 #include <FastLED.h>
-#include "Buttons.h"
+//#include "Buttons.h"
 
 // Use qsuba for smooth pixel colouring and qsubd for non-smooth pixel colouring
 #define qsubd(x, b)  ((x>b)?b:0)    // Digital unsigned subtraction macro. if result <0, then => 0. Otherwise, take on fixed value.
