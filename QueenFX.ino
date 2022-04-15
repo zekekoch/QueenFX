@@ -1,6 +1,6 @@
 #define  FASTLED_ALLOW_INTERRUPTS 0
 #include <FastLED.h>
-//#include "Buttons.h"
+#include "Buttons.h"
 
 // Use qsuba for smooth pixel colouring and qsubd for non-smooth pixel colouring
 #define qsubd(x, b)  ((x>b)?b:0)    // Digital unsigned subtraction macro. if result <0, then => 0. Otherwise, take on fixed value.
@@ -24,7 +24,10 @@ const byte numTubes = 14;
 // fastLED thinks there are 16 strips, but I only use 14 of them
 const byte numVirtualStrips = 16;
 CRGB realLeds[numVirtualStrips][ledCount];
-const byte tubes[numVirtualStrips]
+
+// 2019 
+/*
+const byte tubes2019[numVirtualStrips]
 { 2,  // 1
   7,  // 2
   0,  // 3
@@ -42,6 +45,27 @@ const byte tubes[numVirtualStrips]
   10, // 15 buffer
   14  // 16 buffer 
 } ;
+*/
+
+const byte tubes[numVirtualStrips]
+{ 2,  // 1
+  1,  // 2
+  3,  // 3
+  4,  // 4
+  6, // 5
+  10,  // 6
+  5, // 7
+  9,  // 8
+  12, // 9
+  15, // 10
+  14,  // 11
+  11,  // 12 - tail lights
+  13,  // 13 
+  0,  // 14 buffer
+  7, // 15 buffer
+  8  // 16 buffer 
+} ;
+
 
 byte tailLights = 12;
 //byte cushionsBack = 13;
@@ -49,12 +73,12 @@ byte tailLights = 12;
 
 
 const byte UPDATES_PER_SECOND =200;
-const byte FRAMES_PER_SECOND = 120;
+const byte FRAMES_PER_SECOND = 240;
 
 // the front of the car has shorter lights
 //const int tubeLengths[numStrips] = {73, 136, 220, 247, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273} ;
-const int tubeLengths[numStrips] = {79, 136, 220, 201, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273} ;
-
+//const int tubeLengths[numStrips] = {79, 136, 220, 201, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273} ;
+const int tubeLengths[numStrips] = {16,16,16,16,16,16,16,16,16,16,16,16,16,16};
 CButtons *buttons = new CButtons;
 
 // globals for FX animations
@@ -157,10 +181,12 @@ uint16_t XY( uint8_t x, uint8_t y)
 void setup()
 {
   delay(1000);
-            
+
+  Serial.begin(57600);
+  
   LEDS.addLeds<WS2811_PORTDC,16, GRB>(*realLeds, ledCount);
   LEDS.setBrightness(16);
-  LEDS.setBrightness(32);
+  //LEDS.setBrightness(32);
 
   pinMode(3, OUTPUT);
   pinMode(4, OUTPUT);
@@ -1425,35 +1451,46 @@ boolean checkButton(byte whichButton)
 
 void loop()
 {
+    static long int loopCount = 0;
+    //Serial.print("loop ");Serial.println(loopCount++);
     // first update all of my buttons to check if any are down
     buttons->refresh();
+    //Serial.print("button state ");
+    //Serial.println(buttons->state(0));
+    
     
     
     if(buttons->state(0))
     {
         currentPalette = HeatColors_p;
         Fire2012WithPalette();
+        Serial.print("button state 0:");Serial.println(buttons->state(0));
     } 
     else if(buttons->state(1))
     {
         currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
         Fire2012WithPalette();
+        Serial.print("button state 1:");Serial.println(buttons->state(1));
     } 
     else if (buttons->state(2))
     {
         rotatingRainbow(); 
+        Serial.print("button state 2:");Serial.println(buttons->state(2));
     }
     else if (buttons->state(3))
     {
         spiralRainbow();
+        Serial.print("button state 3:");Serial.println(buttons->state(3));
     }
     else if (buttons->state(4))
     {
         sinelon();
+        Serial.print("button state 4:");Serial.println(buttons->state(4));
     }
     else if (buttons->state(5))
     {
         juggle();
+        Serial.print("button state 5:");Serial.println(buttons->state(5));
     }
     else if (buttons->state(6))
     {
@@ -1465,6 +1502,7 @@ void loop()
         // using the current palette
         mapNoiseToLEDsUsingPalette();
         //mirror();
+        Serial.print("button state 6:");Serial.println(buttons->state(6));
     }
     else if (buttons->state(7))
     {
@@ -1477,6 +1515,8 @@ void loop()
         // using the current palette
         mapNoiseToLEDsUsingPalette();
         mirror();
+        Serial.print("button state 7:");Serial.println(buttons->state(7));
+
     }
     else if (buttons->state(8))
     {
@@ -1547,6 +1587,7 @@ void loop()
     }
     else
     {
+      Serial.println("other button state");
         rotatingRainbow();
         mirror();
     }
@@ -1607,29 +1648,27 @@ void flashSmile()
 void debugColors()
 {
 
-  for(int i = 0;i< numStrips;i++)
+  // numStrips refers to the number of physical strips 
+  // each strip is one pin on the teensy
+  for(int currentStrip = 0;currentStrip< numStrips;currentStrip++)
   {
     // make the last one blue
-    leds[i][tubeLengths[i]-1] = CRGB::Blue;
+    leds[currentStrip][tubeLengths[currentStrip]-1] = CRGB::Blue;
 
     // make the middle one white
-    leds[i][ledCount/2] = CRGB::White;
+    leds[currentStrip][tubeLengths[currentStrip]/2] = CRGB::White;
 
     // purple for every 10 lights
-    for(int l = 0;l<ledCount;l++)
+    for(int currentLed = 0;currentLed<longestTube;currentLed++)
     {
-      if (l % 10 == 0)
-            leds[i][l] = CRGB::Purple;
+      if (currentLed % 10 == 0)
+            leds[currentStrip][currentLed] = CRGB::Purple;
     }
-  }
 
-  for(byte s = 0;s < numStrips;s++)
-    leds[s][0] = CRGB::Purple;
+    //set the first n lights green where n = the index of the current strip
+    for (int currentLed = 1; currentLed < currentStrip+1; currentLed++)    
+      leds[currentStrip][currentLed] = CRGB::Green;
 
-  for(byte s = 0;s < numStrips;s++)
-  {
-    for (int h = 1; h < s+1; h++)    
-        leds[s][h] = CRGB::Green;
   }
 
 }
@@ -1882,6 +1921,30 @@ CRGB getFlameColor()
 
 CRGB getFlameColorFromPalette()
 {
+
+      const CRGBPalette16 flames =
+    {
+        0xFF00FF,
+        0xFF00FF,
+        0xFF00FF,
+        0xFF00FF,
+
+        0xFF0088,
+        0xFF0088,
+        0xFF0088,
+        0xFF0088,
+
+        0x0000AA,
+        0x0000AA,
+        0x0000AA,
+        0x0000AA,
+
+        0x880000,
+        0x880000,
+        0x880000,
+        0x880000
+    };
+
     const CRGBPalette16 reverseFlames =
     {
         0x00FF00,
@@ -1929,7 +1992,7 @@ CRGB getFlameColorFromPalette()
     };
 
 
-    if (buttons->isLifeTestOn())
+    if (!buttons->isLifeTestOn())
         return ColorFromPalette(coldFlames, random8(), 128, LINEARBLEND);
     else
         return ColorFromPalette(reverseFlames, random8(), 128, LINEARBLEND);
