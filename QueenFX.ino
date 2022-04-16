@@ -25,49 +25,27 @@ const byte numTubes = 14;
 const byte numVirtualStrips = 16;
 CRGB realLeds[numVirtualStrips][ledCount];
 
-// 2019 
-/*
-const byte tubes2019[numVirtualStrips]
-{ 2,  // 1
-  7,  // 2
-  0,  // 3
-  4,  // 4
-  12, // 5
-  3,  // 6
-  11, // 7
-  1,  // 8
-  15, // 9
-  13, // 10
-  8,  // 11
-  6,  // 12 - tail lights
-  9,  // 13 
-  5,  // 14 buffer
-  10, // 15 buffer
-  14  // 16 buffer 
-} ;
-*/
-
 const byte tubes[numVirtualStrips]
 { 2,  // 1
-  1,  // 2
-  3,  // 3
-  4,  // 4
-  6, // 5
-  10,  // 6
-  5, // 7
-  9,  // 8
-  12, // 9
-  15, // 10
-  14,  // 11
-  11,  // 12 - tail lights
-  13,  // 13 
-  0,  // 14 buffer
-  7, // 15 buffer
-  8  // 16 buffer 
+  3,  // 2
+  4,  // 3
+  6, // 4
+  10,  // 5
+  5, // 6
+  9,  // 7
+  12, // 8
+  15, // 9
+  14,  // 10
+  11,  // 11 
+  13,  // 12 - tail lights
+  7,  // ground effect lighting
+  8,
+  1,
+  0
 } ;
 
 
-byte tailLights = 12;
+byte tailLights = 10;
 
 const byte UPDATES_PER_SECOND =200;
 const byte FRAMES_PER_SECOND = 240;
@@ -286,6 +264,11 @@ void showLeds()
         // when the car is showing the same thing on all strips
         // they don't also show that. it's not great seperation of 
         // duties so I should fix this at some point 
+        for(int iLed = 0; iLed <= tubeLengths[currentStrip]; iLed++) 
+        {
+          realLeds[fastLedStrip][iLed] = leds[currentStrip][iLed];
+        }
+
     }
     else
     {
@@ -308,45 +291,7 @@ void showLeds()
 
 }
 
-void oldShowLeds()
-{
-    // there are 13 phyical strips, but the first three are all on one logical strip
-    for (byte iStrip = 0;iStrip < numTubes;iStrip++)
-    {
-        switch(iStrip)
-        {
-            case 0:
-                for(int iLed = 0;iLed < tubeLengths[iStrip];iLed++)
-                {
-                    realLeds[0][iLed+155] = leds[iStrip][mapLed(iLed, ledCount, tubeLengths[iStrip])];
-                }                
-                break;
-            case 1: 
-                // this one is backwards
-                for(int iLed = 0;iLed < tubeLengths[iStrip];iLed++)
-                {
-                    realLeds[0][154-iLed] = leds[iStrip][mapLed(iLed, ledCount, tubeLengths[iStrip])];
-                }                
-                break;
-            case 2:
-                for(int iLed = 0;iLed < 84;iLed++)
-                {
-                    realLeds[0][iLed] = leds[iStrip][mapLed(iLed, ledCount, tubeLengths[iStrip])];
-                }                
-                break;
-            case 3: 
-            default:
-                for(int iLed = 0;iLed < ledCount;iLed++)
-                {
-                    realLeds[iStrip - 2][iLed] = leds[iStrip][mapLed(iLed, ledCount, tubeLengths[iStrip])];
-                }
-            break;
-        }
-    }
 
-    LEDS.show();
-
-}
 
 void colorPaletteLoop()
 {
@@ -375,7 +320,6 @@ void FillLEDsFromPaletteColors( uint8_t colorIndex, uint8_t width)
         }
     }
 }
-
 
 // There are several different palettes of colors demonstrated here.
 //
@@ -1599,7 +1543,7 @@ void loop()
     //send the 'leds' array out to the actual LED strip
     pulseJets();
 
-    //debugColors(); // temporarily let me see which hoop is which
+    debugColors(); // temporarily let me see which hoop is which
     showLeds();  
 
     // insert a delay to keep the framerate modest
@@ -1624,30 +1568,6 @@ void rainbowWithGlitter()
   addGlitter(80);
 }
 
-void flashSmile()
-{
-  static bool isSmile = false;
-  static byte smileCount = 0;
-  if(random16(5000) == 0)
-  {    
-    isSmile = true;
-    smileCount = 0;
-  }
-
-  if (isSmile == true)
-  {
-        smileCount++;
-        if (smileCount == 10)
-            isSmile = false;
-
-        smile();
-  }
-  else
-  {
-    pulseJets();
-  }
-}
-
 void debugColors()
 {
 
@@ -1662,18 +1582,16 @@ void debugColors()
     leds[currentStrip][tubeLengths[currentStrip]/2] = CRGB::White;
 
     // purple for every 10 lights
-    for(int currentLed = 0;currentLed<longestTube;currentLed++)
+    for(int currentLed = 1;currentLed<longestTube;currentLed++)
     {
       if (currentLed % 10 == 0)
             leds[currentStrip][currentLed] = CRGB::Purple;
     }
 
     //set the first n lights green where n = the index of the current strip
-    for (int currentLed = 1; currentLed < currentStrip+1; currentLed++)    
+    for (int currentLed = 0; currentLed < currentStrip+1; currentLed++)    
       leds[currentStrip][currentLed] = CRGB::Green;
-
   }
-
 }
 
 // Fire2012 by Mark Kriegsman, July 2012
@@ -2002,44 +1920,20 @@ CRGB getFlameColorFromPalette()
 
 }
 
+
 void pulseJets()
 {
-  for (int i = 0;i<50;i++)
+        
+  for (int iLed = 0;iLed<50;iLed++)
   {
-    realLeds[tubes[tailLights]][i] = getFlameColorFromPalette();
-    realLeds[tubes[tailLights]][99-i] = getFlameColorFromPalette();
-
-    //leds[tailLights][i] += CRGB(redShift,0,0);
-    //leds[tailLights][99-i]+= CRGB(redShift,0,0);
+    CRGB color = ColorFromPalette(LavaColors_p, random8(), 128, LINEARBLEND);
+    // swap red and green because the tail lights are a different strip that swap r&g.
+    byte r = color.r;
+    color.r = color.g;
+    color.g = r;
+    leds[tubes[tailLights]][iLed] = color;
+    leds[tubes[tailLights]][99-iLed] = color;
   }
-}
-
-void smile()
-{
-  fill_solid(realLeds[tubes[tailLights]], ledCount, CRGB::Black);
-  //for (int i = 0; i<32;i++)
-  //  leds[tailLights][i] = CRGB::Red;
-
-  for (int i = 36; i<43;i++)
-    realLeds[tubes[tailLights]][i] = CRGB::Red;
-
-  realLeds[tubes[tailLights]][44] = CRGB::Blue;
-  realLeds[tubes[tailLights]][34] = CRGB::Blue;
-
-  realLeds[tubes[tailLights]][49] = CRGB::Purple;
-}
-
-void bigSmile()
-{
-  fill_solid(realLeds[tailLights], ledCount, CRGB::Black);
-
-  for (int i = 8; i<23;i++)
-    realLeds[tubes[tailLights]][i] = CRGB::Red;
-
-  realLeds[tubes[tailLights]][3] = CRGB::Blue;
-  realLeds[tubes[tailLights]][27] = CRGB::Blue;
-
-  realLeds[tubes[tailLights]][49] = CRGB::HotPink;
 
 }
 
