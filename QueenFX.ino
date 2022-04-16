@@ -68,17 +68,14 @@ const byte tubes[numVirtualStrips]
 
 
 byte tailLights = 12;
-//byte cushionsBack = 13;
-//byte cushionFront = 14;
-
 
 const byte UPDATES_PER_SECOND =200;
 const byte FRAMES_PER_SECOND = 240;
 
 // the front of the car has shorter lights
 //const int tubeLengths[numStrips] = {73, 136, 220, 247, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273} ;
-//const int tubeLengths[numStrips] = {79, 136, 220, 201, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273} ;
-const int tubeLengths[numStrips] = {16,16,16,16,16,16,16,16,16,16,16,16,16,16};
+const int tubeLengths[numStrips] = {79, 136, 220, 201, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273} ;
+//const int tubeLengths[numStrips] = {16,16,16,16,16,16,16,16,16,16,16,16,16,16};
 CButtons *buttons = new CButtons;
 
 // globals for FX animations
@@ -183,8 +180,15 @@ void setup()
   delay(1000);
 
   Serial.begin(57600);
-  
-  LEDS.addLeds<WS2811_PORTDC,16, GRB>(*realLeds, ledCount);
+
+
+  // there's an unknown problem with PORTDC, so this is code I got from daniel garcia (may he rest in peace)
+  // (https://forum.pjrc.com/threads/31482-Problem-with-FastLED-and-16-way-parallel-output?highlight=WS2811_PORTDC)
+  // to use PORTD and PORTC seperately
+  //LEDS.addLeds<WS2811_PORTDC,16, RGB>(*realLeds, ledCount);
+  LEDS.addLeds<WS2811_PORTD,8, RGB>(*realLeds, ledCount);
+  LEDS.addLeds<WS2811_PORTC,8, RGB>(*realLeds + (ledCount * (8)), ledCount);
+
   LEDS.setBrightness(16);
   //LEDS.setBrightness(32);
 
@@ -288,12 +292,13 @@ void showLeds()
         for(int iLed = 0; iLed <= tubeLengths[currentStrip]; iLed++) 
         {
             CRGB color = leds[currentStrip][iLed];
-            switch(currentStrip)
-            {
-                case 3:
-                    color = CRGB::Blue;
-                    break;
-            }
+            // i'm not sure why I was setting this one blue...
+            //switch(currentStrip)
+            //{
+            //    case 3:
+            //        color = CRGB::Blue;
+            //        break;
+            //}
             realLeds[fastLedStrip][iLed] = color;
         }
     }
@@ -1454,12 +1459,11 @@ void loop()
     static long int loopCount = 0;
     //Serial.print("loop ");Serial.println(loopCount++);
     // first update all of my buttons to check if any are down
-    buttons->refresh();
+   buttons->refresh();
     //Serial.print("button state ");
     //Serial.println(buttons->state(0));
     
-    
-    
+
     if(buttons->state(0))
     {
         currentPalette = HeatColors_p;
@@ -1595,8 +1599,7 @@ void loop()
     //send the 'leds' array out to the actual LED strip
     pulseJets();
 
-
-    debugColors(); // temporarily let me see which hoop is which
+    //debugColors(); // temporarily let me see which hoop is which
     showLeds();  
 
     // insert a delay to keep the framerate modest
