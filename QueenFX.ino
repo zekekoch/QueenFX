@@ -6,10 +6,6 @@
 #define qsubd(x, b)  ((x>b)?b:0)    // Digital unsigned subtraction macro. if result <0, then => 0. Otherwise, take on fixed value.
 #define qsuba(x, b)  ((x>b)?x-b:0)  // Analog Unsigned subtraction macro. if result <0, then => 0
 
-
-//const int realLedCount = 252;
-//const byte realLedCount = 192;
-//const int ledCount = 298;
 const int ledCount = 298;
 const int longestTube = 273;
   
@@ -19,56 +15,35 @@ CRGB leds[numStrips][longestTube];
 CRGB ledBuffer[numStrips][longestTube];
 
 // there are 14 tubes (the front is atached to strip 2 and the 2nd is attached to tube 1)
+// zk:2022 not sure why numtubes and numstrips are different
 const byte numTubes = 14;
 
-// fastLED thinks there are 16 strips, but I only use 14 of them
+// fastLED thinks there are 16 strips
 const byte numVirtualStrips = 16;
 CRGB realLeds[numVirtualStrips][ledCount];
 
-const byte tubes[numVirtualStrips]
-{ 2,  // 1
-  3,  // 2
-  4,  // 3
-  6, // 4
-  10,  // 5
-  5, // 6
-  9,  // 7
-  12, // 8
-  15, // 9
-  14,  // 10
-  11,  // 11 
-  13,  // 12 - tail lights
-  7,  // ground effect lighting
-  8,
-  1,
-  0
-} ;
+//const byte tubes[numVirtualStrips] =   {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
+const byte tubes[numVirtualStrips] = {7,2,3,4,6,10,5,9,12,15,14,11,13,8,1,0};
 
+byte tailLights = 12;
 
-byte tailLights = 10;
-
-const byte UPDATES_PER_SECOND =200;
+const byte UPDATES_PER_SECOND = 200;
 const byte FRAMES_PER_SECOND = 240;
 
 // the front of the car has shorter lights
-//const int tubeLengths[numStrips] = {73, 136, 220, 247, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273} ;
 const int tubeLengths[numStrips] = {79, 136, 220, 201, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273} ;
 //const int tubeLengths[numStrips] = {16,16,16,16,16,16,16,16,16,16,16,16,16,16};
 CButtons *buttons = new CButtons;
 
 // globals for FX animations
 int BOTTOM_INDEX = 0;
-int TOP_INDEX = int(ledCount/2);
+int TOP_INDEX = int(longestTube/2);
 int FIRST_THIRD = int(longestTube/3);
 int SECOND_THIRD = FIRST_THIRD * 2;
 int EVENODD = longestTube%2;
 
 
 CRGB ledsX[longestTube]; //-ARRAY FOR COPYING WHATS IN THE LED STRIP CURRENTLY (FOR CELL-AUTOMATA, ETC)
-//const byte longestTubes[] = { };
-
-//int ledMode = 23;      //-START IN DEMO MODE
-//int ledMode = 5;
 
 //-PERISTENT VARS
 int idex = 0;        //-LED INDEX (0 to longestTube-1
@@ -79,8 +54,6 @@ bool bounceForward = true;  //-SWITCH FOR COLOR BOUNCE (0-1)
 int bouncedirection = 0;
 float tcount = 0.0;      //-INC VAR FOR SIN LOOPS
 int lcount = 0;      //-ANOTHER COUNTING VAR
-//byte eq[7] ={};
-
 
 // color palette related stuff
 CRGBPalette16 currentPalette;
@@ -141,21 +114,10 @@ SimplePatternList gPatterns = {
 uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
 uint8_t gHue = 0; // rotating "base color" used by many of the patterns
 
-
-//
-// Mark's xy coordinate mapping code.  See the XYMatrix for more information on it.
-//
-uint16_t XY( uint8_t x, uint8_t y)
-{
-  uint16_t i;
-  i = (y * numTubes) + x;
-  return i;
-}
-
 //------------------SETUP------------------
 void setup()
 {
-  delay(1000);
+  delay(500);
 
   Serial.begin(57600);
 
@@ -196,7 +158,6 @@ int mapLed(int led, int from, int to)
     else
         return led * ((from * 1024)/to) / (1024); 
 }
-
 
 // the leds for the tubes are in an array called leds
 // the array that FastLED uses to write to the actual strips is 
@@ -257,31 +218,12 @@ void showLeds()
 
       //leds[tubes[currentTube]][tubeLengths[3]] = CRGB::White;
       //leds[tubes[currentTube]][tubeLengths[0]+tubeLengths[3]] = CRGB::White;
-    } else if (currentStrip == tailLights)
-    {
-        // skip the tailLights because I animate them 
-        // using pulsejets. I'm not sure why but maybe so that
-        // when the car is showing the same thing on all strips
-        // they don't also show that. it's not great seperation of 
-        // duties so I should fix this at some point 
-        for(int iLed = 0; iLed <= tubeLengths[currentStrip]; iLed++) 
-        {
-          realLeds[fastLedStrip][iLed] = leds[currentStrip][iLed];
-        }
-
-    }
+    }    
     else
     {
         for(int iLed = 0; iLed <= tubeLengths[currentStrip]; iLed++) 
         {
             CRGB color = leds[currentStrip][iLed];
-            // i'm not sure why I was setting this one blue...
-            //switch(currentStrip)
-            //{
-            //    case 3:
-            //        color = CRGB::Blue;
-            //        break;
-            //}
             realLeds[fastLedStrip][iLed] = color;
         }
     }
@@ -1931,8 +1873,8 @@ void pulseJets()
     byte r = color.r;
     color.r = color.g;
     color.g = r;
-    leds[tubes[tailLights]][iLed] = color;
-    leds[tubes[tailLights]][99-iLed] = color;
+    leds[tailLights][iLed] = color;
+    leds[tailLights][99-iLed] = color;
   }
 
 }
