@@ -9,12 +9,14 @@
 const int ledCount = 300;
 const int longestTube = 273;
   
-// there are 14 led strips (12 on tubes, one for the tail lights and one for the dashboard)
+// there are 16 virtual led strips (14 on tubes, one for the tail lights and one for the ground effect lights)
+// three of the strips are on one pin and two are on another.
 const byte numStrips = 16;
 CRGB leds[numStrips][longestTube];
 CRGB ledBuffer[numStrips][longestTube];
 
-// fastLED thinks there are 16 strips
+// I'm using the teensy 3.2 with 16 pins (DMA)
+// I'm not using 3 of the pins, but I'm keeping this retangular for ease of thinking
 const byte numVirtualStrips = 16;
 CRGB realLeds[numVirtualStrips][ledCount];
 
@@ -22,16 +24,17 @@ CRGB realLeds[numVirtualStrips][ledCount];
 // zk:2022 not sure why numtubes and numstrips are different
 const byte numTubes = 16;
 
-//const byte tubes[numStrips] =   {0,1,2,3,4,5,6, 7,8,9,10,11,12,13,14,15};
-const byte tubes[numStrips] =     {0,1,7,2,3,4,6,10,5,9,12,15,14,11, 8,13};
+//const byte tubes[numStrips] =   { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15};
+const byte tubes[numStrips] =     { 8, 0, 1, 7, 2, 3, 4, 6,10, 5, 9,12,15,14,11,13};
 
-byte tailLights = 14;
+byte tailLights = 15;
+byte groundEffect = 0;
 
 const byte UPDATES_PER_SECOND = 200;
 const byte FRAMES_PER_SECOND = 240;
 
 // the front of the car has shorter lights
-const int tubeLength[numStrips] = {79, 136, 163, 201, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273} ;
+const int tubeLength[numStrips] = {16, 79, 136, 163, 201, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273,100} ;
 //const int tubeLength[numStrips] = {16,16,16,16,16,16,16,16,16,16,16,16,16,16};
 CButtons *buttons = new CButtons;
 
@@ -147,6 +150,22 @@ void setup()
     
   showLeds();
   Serial.println("https://github.com/zekekoch/QueenFX");
+  printStrips();
+}
+
+void printStrips()
+{
+    for (byte iStrip = 0;iStrip<numStrips;iStrip++)
+    {
+        Serial.print("[");
+        Serial.print(iStrip);
+        if (iStrip == tailLights)
+            Serial.print("->");
+        else
+            Serial.print(":");
+        Serial.print(tubes[iStrip]);
+        Serial.print("]");
+    }
 }
 
 // roughly map leds dealing with the fact that
@@ -166,70 +185,50 @@ int mapLed(int led, int from, int to)
 //
 // I need to copy the data from the leds array to the realLeds array 
 // taking into consideration the fact that I'm sharing some led strips
-// between different physical tubes (tube 1 is the end of strip 2, tube 2 
-// is the end of strip 1). To make things slightly more difficult the 
-// secondary tubes are backwards and the order of the strips on my art 
-// car doesn't match the order of FastLeds' parallel output.
-// phew
+// between different physical tubes (tube 0 and 1 share the same pin as tube 4),
+// and tubes 2 and 3 share another pin.
+// To make things slightly more difficult the secondary tubes are backwards and 
+// the order of the strips on my art car doesn't match the order of FastLeds' parallel output.
+// phew.
 void showLeds()
 {
-  // 14 virtual strips
   for(int currentStrip = 0; currentStrip < numStrips; currentStrip++) 
   {
       // map from my model (the order of the strips on the car) to fastled
       // to be honest I don't know how fastled determines the order. it's not
       // based on the pin numbers so it must have something to do with the dma
-    byte fastLedStrip = tubes[currentStrip];
 
-    // the 1st light strip is connected to the end of the 4th  light strip
+    // ground effects come first, they're stored at the end of pin 4
     if(currentStrip == 0)
     {
-        // virtual strip 0 is on the same strip as physical tube 3 and backwards!
-        for(int iLed = 0; iLed < tubeLength[0]; iLed++) 
+        for(int iLed = 0; iLed < tubeLength[currentStrip]; iLed++) 
         {
-            realLeds[tubes[3]][tubeLength[0] + tubeLength[3]-iLed] = leds[0][iLed];
+            realLeds[tubes[4]][tubeLength[4] + tubeLength[1] + iLed + 1] = leds[currentStrip][iLed];
         }
     }
+    // tube 1 also shares a pin with tube 4 (but it's backwards)
     else if(currentStrip == 1)
     {
-        // this one is backwards
-        for(int iLed = 0; iLed < tubeLength[1]; iLed++) 
+        // virtual strip 0 is on the same strip as physical tube 3 and backwards!
+        for(int iLed = 0; iLed < tubeLength[currentStrip]; iLed++) 
         {
-            realLeds[tubes[2]][tubeLength[1] + tubeLength[2]-iLed] = leds[1][iLed];
+            realLeds[tubes[4]][tubeLength[currentStrip] + tubeLength[4]-iLed - 1] = leds[currentStrip][iLed];
         }
     }
-    /*
-    // the 2nd light strip is connected to the end of the 3rd light strip
+    // tubes 2 and 3 share pin 3 (and 2 is backwards)
     else if(currentStrip == 2)
     {
-        // make the end of the tube white for debugging purposes
-        //realLeds[currentStrip][tubeLength[2]] = CRGB::White;
-
-        // first deal with the third tube
-        for(int iLed = 0; iLed < tubeLength[2]; iLed++) 
+        // this one is backwards
+        for(int iLed = 0; iLed < tubeLength[currentStrip]; iLed++) 
         {
-            realLeds[tubes[2]][iLed] = leds[currentStrip][iLed];
+            realLeds[tubes[3]][tubeLength[currentStrip] + tubeLength[3]-iLed -1] = leds[currentStrip][iLed];
         }
     }
-
-    else if(currentStrip == 3)
-    {
-        // first deal with the third tube
-        for(int iLed = 0; iLed < tubeLength[3]; iLed++) 
-        {
-            realLeds[fastLedStrip][iLed] = leds[currentStrip][iLed];
-        }
-
-      //leds[tubes[currentTube]][tubeLength[3]] = CRGB::White;
-      //leds[tubes[currentTube]][tubeLength[0]+tubeLength[3]] = CRGB::White;
-    }    
-    */
     else
     {
         for(int iLed = 0; iLed < tubeLength[currentStrip]; iLed++) 
         {
-            CRGB color = leds[currentStrip][iLed];
-            realLeds[fastLedStrip][iLed] = color;
+            realLeds[tubes[currentStrip]][iLed] = leds[currentStrip][iLed];
         }
     }
   }
