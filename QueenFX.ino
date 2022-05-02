@@ -13,7 +13,6 @@ const int longestTube = 273;
 // three of the strips are on one pin and two are on another.
 const byte numStrips = 16;
 CRGB leds[numStrips][longestTube];
-CRGB ledBuffer[numStrips][longestTube];
 
 // I'm using the teensy 3.2 with 16 pins (DMA)
 // I'm not using 3 of the pins, but I'm keeping this retangular for ease of thinking
@@ -101,20 +100,6 @@ void sinelon();
 void juggle();
 void mapNoiseToLEDsUsingPalette();
 
-// List of patterns to cycle through.  Each is defined as a separate function below.
-typedef void (*SimplePatternList[])();
-SimplePatternList gPatterns = { 
-    Fire2012WithPalette,
-    rotatingRainbow, 
-    rainbowWithGlitter, 
-    spiralRainbow,
-    mapNoiseToLEDsUsingPalette,
-    police_lightsALL,
-    sinelon, 
-    juggle
-};
-
-uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
 uint8_t gHue = 0; // rotating "base color" used by many of the patterns
 
 //------------------SETUP------------------
@@ -483,18 +468,6 @@ void copy_led_array(){
     }
 }
 
-void fillBuffer()
-{
-    for(int iTube = 0; iTube < numTubes; iTube++ ) 
-    {
-        for(int iLed = 0; iLed < longestTube;iLed++)
-        {
-            ledBuffer[iTube][iLed] = leds[iTube][iLed];
-        }
-    }
-}
-
-
 // todo: make this work with multiple arrays
 void print_led_arrays(int ilen){
     copy_led_array();
@@ -559,66 +532,6 @@ void fillSolid(int cred, int cgrn, int cblu) { //-SET ALL LEDS TO ONE COLOR
     fillSolid(0, CRGB(cred, cgrn, cblu));    
 }
 
-void explosion()
-{
-    static int counter = 0;
-    counter++; 
-
-    leds[random8(numTubes)][random8(longestTube)] = CRGB(255,0,0);
-//    leds[5][5] = CRGB(255,0,0);
-
-    fillBuffer();
-
-//    blur2d(*leds, numTubes, longestTube, 64);
-
-    for(byte iStrip = 1;iStrip < numTubes-1;iStrip++)
-    {
-        for(int iLed = 1; iLed < longestTube-1;iLed++)
-        {
-
-            if (ledBuffer[iStrip][iLed].red > 200)
-            {            
-                ledBuffer[iStrip][iLed].red = 0;
-                //printLed(iStrip, iLed);
-            }
-
-            // BUG: why am I reseting count here?
-            int count = 0;
-            if (ledBuffer[iStrip-1][iLed].red > 200)
-            {
-                count++;
-            } 
-            if (ledBuffer[iStrip-1][iLed-1].red > 200)
-            {
-                count++;
-            }
-            if (ledBuffer[iStrip][iLed-1].red > 200)
-                count++;
-
-            if (count > 0)
-            {
-                Serial.print("*");
-                printLed(iStrip, iLed);
-                leds[iStrip][iLed] = CRGB(255, 0, 0);
-            }
-        }
-        Serial.println();
-    }
-    //for(int i = 0;i<numStrips;i++)
-    //    fadeToBlackBy(leds[i], longestTube, 30);
-}
-
-void printLed(int s, byte l)
-{
-    Serial.print("[");
-    Serial.print(s);
-    Serial.print(".");
-    Serial.print(l);
-    Serial.print(".");
-    Serial.print(ledBuffer[s][l]);
-    Serial.print("]");
-}
-
 void plasma() 
 { // This is the heart of this program. Sure is short. . . and fast.
   int thisPhase = beatsin8(6,-64,64);                           // Setting phase change for a couple of waves.
@@ -664,8 +577,6 @@ void ripple() {
     static int step = -1;                                                // -1 is the initializing step.
     static uint8_t myfade = 255;                                         // Starting brightness.
     const byte maxsteps = 16;                                           // Case statement wouldn't allow a variable.
-
-    uint8_t bgcol = 0;                                            // Background colour rotates.
 
     for(byte iStrip =0;iStrip < numTubes;iStrip++)
     {
@@ -1355,13 +1266,8 @@ boolean checkButton(byte whichButton)
 
 void loop()
 {
-    static long int loopCount = 0;
-    //Serial.print("loop ");Serial.println(loopCount++);
     // first update all of my buttons to check if any are down
-   buttons->refresh();
-    //Serial.print("button state ");
-    //Serial.println(buttons->state(0));
-    
+    buttons->refresh();
 
     if(buttons->state(0))
     {
@@ -1472,10 +1378,6 @@ void loop()
     {
         fourthOfJuly();
     } 
-    else if (buttons->state(13))
-    {
-        explosion();
-    }
     else if (buttons->state(14))
     {
         EVERY_N_MILLISECONDS(50)
@@ -1495,6 +1397,7 @@ void loop()
       //mirror();
 
         simpleColors();
+//        explosion();
     }
     
     //send the 'leds' array out to the actual LED strip
@@ -1508,14 +1411,6 @@ void loop()
 
     // do some periodic updates
     EVERY_N_MILLISECONDS( 20 ) { gHue++; } // slowly cycle the "base color" through the rainbow
-}
-
-#define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
-
-void nextPattern()
-{
-  // add one to the current pattern number, and wrap around at the end
-  gCurrentPatternNumber = (gCurrentPatternNumber + 1) % ARRAY_SIZE( gPatterns);
 }
 
 void rainbowWithGlitter() 
@@ -1803,7 +1698,7 @@ CRGB getFlameColor()
 CRGB getFlameColorFromPalette()
 {
 
-      const CRGBPalette16 flames =
+    const CRGBPalette16 flames =
     {
         0xFF00FF,
         0xFF00FF,
