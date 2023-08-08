@@ -35,6 +35,7 @@ const byte FRAMES_PER_SECOND = 240;
 // the front of the car has shorter lights
 const int tubeLength[numStrips] = {16, 79, 136, 163, 201, 254, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube,100} ;
 //const int tubeScale[numStrips] = {16/longestTube*256, 79/longestTube*256, 136/longestTube*256, 163/longestTube*256, 201/longestTube*256, 254/longestTube*256, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube,100/longestTube*256} ;
+=======
 //const int tubeLength[numStrips] = {16,16,16,16,16,16,16,16,16,16,16,16,16,16};
 CButtons *buttons = new CButtons;
 
@@ -118,7 +119,7 @@ void setup()
   LEDS.addLeds<WS2811_PORTD,8, RGB>(*realLeds, ledCount);
   LEDS.addLeds<WS2811_PORTC,8, RGB>(*realLeds + (ledCount * (8)), ledCount);
 
-  LEDS.setBrightness(64);
+  LEDS.setBrightness(16);
   //LEDS.setBrightness(32);
 
   pinMode(3, OUTPUT);
@@ -189,7 +190,8 @@ void showLeds()
     {
         for(int iLed = 0; iLed < tubeLength[currentStrip]; iLed++) 
         {
-            realLeds[tubes[4]][tubeLength[4] + tubeLength[1] + iLed] = leds[currentStrip][iLed];
+            // todo: added iled + 1, I should doublecheck this change
+            realLeds[tubes[4]][tubeLength[4] + tubeLength[1] + iLed + 1] = leds[currentStrip][iLed];
         }
     }
     // tube 1 also shares a pin with tube 4 (but it's backwards)
@@ -1274,27 +1276,22 @@ void loop()
     // first update all of my buttons to check if any are down
     buttons->refresh();
 
-    for (byte i = 0;i<16;i++)
-    {
-        if (buttons->state(i))
-        {
-            Serial.print(i);Serial.print(" on");Serial.println();
-        }
-    }
-
     if(buttons->state(0))
     {
         currentPalette = HeatColors_p;
         Fire2012WithPalette();
+        Serial.print("button state 0:");Serial.println(buttons->state(0));
     } 
     else if(buttons->state(1))
     {
         currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
         Fire2012WithPalette();
+        Serial.print("button state 1:");Serial.println(buttons->state(1));
     } 
     else if (buttons->state(2))
     {
         rotatingRainbow(); 
+        Serial.print("button state 2:");Serial.println(buttons->state(2));
     }
     else if (buttons->state(3))
     {
