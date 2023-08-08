@@ -1,75 +1,52 @@
 #define  FASTLED_ALLOW_INTERRUPTS 0
 #include <FastLED.h>
-//#include "Buttons.h"
+#include "Buttons.h"
 
 // Use qsuba for smooth pixel colouring and qsubd for non-smooth pixel colouring
 #define qsubd(x, b)  ((x>b)?b:0)    // Digital unsigned subtraction macro. if result <0, then => 0. Otherwise, take on fixed value.
 #define qsuba(x, b)  ((x>b)?x-b:0)  // Analog Unsigned subtraction macro. if result <0, then => 0
 
-
-//const int realLedCount = 252;
-//const byte realLedCount = 192;
-//const int ledCount = 298;
-const int ledCount = 298;
+const int ledCount = 300;
 const int longestTube = 273;
   
-// there are 14 led strips (12 on tubes, one for the tail lights and one for the dashboard)
-const byte numStrips = 14;
+// there are 16 virtual led strips (14 on tubes, one for the tail lights and one for the ground effect lights)
+// three of the strips are on one pin and two are on another.
+const byte numStrips = 16;
 CRGB leds[numStrips][longestTube];
-CRGB ledBuffer[numStrips][longestTube];
 
-// there are 14 tubes (the front is atached to strip 2 and the 2nd is attached to tube 1)
-const byte numTubes = 14;
-
-// fastLED thinks there are 16 strips, but I only use 14 of them
+// I'm using the teensy 3.2 with 16 pins (DMA)
+// I'm not using 3 of the pins, but I'm keeping this retangular for ease of thinking
 const byte numVirtualStrips = 16;
 CRGB realLeds[numVirtualStrips][ledCount];
-const byte tubes[numVirtualStrips]
-{ 2,  // 1
-  7,  // 2
-  0,  // 3
-  4,  // 4
-  12, // 5
-  3,  // 6
-  11, // 7
-  1,  // 8
-  15, // 9
-  13, // 10
-  8,  // 11
-  6,  // 12 - tail lights
-  9,  // 13 
-  5,  // 14 buffer
-  10, // 15 buffer
-  14  // 16 buffer 
-} ;
 
-byte tailLights = 12;
-//byte cushionsBack = 13;
-//byte cushionFront = 14;
+// there are 14 tubes (the front is atached to strip 2 and the 2nd is attached to tube 1)
+// zk:2022 not sure why numtubes and numstrips are different
+const byte numTubes = 16;
 
+//const byte tubes[numStrips] =   { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15};
+const byte tubes[numStrips] =     { 8, 0, 1, 7, 2, 3, 4, 6,10, 5, 9,12,15,14,11,13};
 
-const byte UPDATES_PER_SECOND =200;
-const byte FRAMES_PER_SECOND = 120;
+byte tailLights = 15;
+byte groundEffect = 0;
+
+const byte UPDATES_PER_SECOND = 200;
+const byte FRAMES_PER_SECOND = 240;
 
 // the front of the car has shorter lights
-//const int tubeLengths[numStrips] = {73, 136, 220, 247, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273} ;
-const int tubeLengths[numStrips] = {79, 136, 220, 201, 254, 273, 273, 273, 273, 273, 273, 273, 273, 273} ;
-
+const int tubeLength[numStrips] = {16, 79, 136, 163, 201, 254, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube,100} ;
+//const int tubeScale[numStrips] = {16/longestTube*256, 79/longestTube*256, 136/longestTube*256, 163/longestTube*256, 201/longestTube*256, 254/longestTube*256, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube,100/longestTube*256} ;
+//const int tubeLength[numStrips] = {16,16,16,16,16,16,16,16,16,16,16,16,16,16};
 CButtons *buttons = new CButtons;
 
 // globals for FX animations
 int BOTTOM_INDEX = 0;
-int TOP_INDEX = int(ledCount/2);
+int TOP_INDEX = int(longestTube/2);
 int FIRST_THIRD = int(longestTube/3);
 int SECOND_THIRD = FIRST_THIRD * 2;
 int EVENODD = longestTube%2;
 
 
 CRGB ledsX[longestTube]; //-ARRAY FOR COPYING WHATS IN THE LED STRIP CURRENTLY (FOR CELL-AUTOMATA, ETC)
-//const byte longestTubes[] = { };
-
-//int ledMode = 23;      //-START IN DEMO MODE
-//int ledMode = 5;
 
 //-PERISTENT VARS
 int idex = 0;        //-LED INDEX (0 to longestTube-1
@@ -80,8 +57,6 @@ bool bounceForward = true;  //-SWITCH FOR COLOR BOUNCE (0-1)
 int bouncedirection = 0;
 float tcount = 0.0;      //-INC VAR FOR SIN LOOPS
 int lcount = 0;      //-ANOTHER COUNTING VAR
-//byte eq[7] ={};
-
 
 // color palette related stuff
 CRGBPalette16 currentPalette;
@@ -126,41 +101,25 @@ void sinelon();
 void juggle();
 void mapNoiseToLEDsUsingPalette();
 
-// List of patterns to cycle through.  Each is defined as a separate function below.
-typedef void (*SimplePatternList[])();
-SimplePatternList gPatterns = { 
-    Fire2012WithPalette,
-    rotatingRainbow, 
-    rainbowWithGlitter, 
-    spiralRainbow,
-    mapNoiseToLEDsUsingPalette,
-    police_lightsALL,
-    sinelon, 
-    juggle
-};
-
-uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
 uint8_t gHue = 0; // rotating "base color" used by many of the patterns
-
-
-//
-// Mark's xy coordinate mapping code.  See the XYMatrix for more information on it.
-//
-uint16_t XY( uint8_t x, uint8_t y)
-{
-  uint16_t i;
-  i = (y * numTubes) + x;
-  return i;
-}
 
 //------------------SETUP------------------
 void setup()
 {
-  delay(1000);
-            
-  LEDS.addLeds<WS2811_PORTDC,16, GRB>(*realLeds, ledCount);
-  LEDS.setBrightness(16);
-  LEDS.setBrightness(32);
+  delay(500);
+
+  Serial.begin(57600);
+
+
+  // there's an unknown problem with PORTDC, so this is code I got from daniel garcia (may he rest in peace)
+  // (https://forum.pjrc.com/threads/31482-Problem-with-FastLED-and-16-way-parallel-output?highlight=WS2811_PORTDC)
+  // to use PORTD and PORTC seperately
+  //LEDS.addLeds<WS2811_PORTDC,16, RGB>(*realLeds, ledCount);
+  LEDS.addLeds<WS2811_PORTD,8, RGB>(*realLeds, ledCount);
+  LEDS.addLeds<WS2811_PORTC,8, RGB>(*realLeds + (ledCount * (8)), ledCount);
+
+  LEDS.setBrightness(64);
+  //LEDS.setBrightness(32);
 
   pinMode(3, OUTPUT);
   pinMode(4, OUTPUT);
@@ -172,10 +131,27 @@ void setup()
 
   Serial.begin(57600);
   Serial.flush();
-  fillSolid(0,0,0); //-BLANK STRIP
+  for(byte tube = 0;tube < numTubes;tube++)
+    fill_solid(realLeds[tube],ledCount,0); //-BLANK STRIP
     
   showLeds();
   Serial.println("https://github.com/zekekoch/QueenFX");
+  printStrips();
+}
+
+void printStrips()
+{
+    for (byte iStrip = 0;iStrip<numStrips;iStrip++)
+    {
+        Serial.print("[");
+        Serial.print(iStrip);
+        if (iStrip == tailLights)
+            Serial.print("->");
+        else
+            Serial.print(":");
+        Serial.print(tubes[iStrip]);
+        Serial.print("]");
+    }
 }
 
 // roughly map leds dealing with the fact that
@@ -189,132 +165,61 @@ int mapLed(int led, int from, int to)
         return led * ((from * 1024)/to) / (1024); 
 }
 
-
 // the leds for the tubes are in an array called leds
 // the array that FastLED uses to write to the actual strips is 
 // called realLeds.
 //
 // I need to copy the data from the leds array to the realLeds array 
 // taking into consideration the fact that I'm sharing some led strips
-// between different physical tubes (tube 1 is the end of strip 2, tube 2 
-// is the end of strip 1). To make things slightly more difficult the 
-// secondary tubes are backwards and the order of the strips on my art 
-// car doesn't match the order of FastLeds' parallel output.
-// phew
+// between different physical tubes (tube 0 and 1 share the same pin as tube 4),
+// and tubes 2 and 3 share another pin.
+// To make things slightly more difficult the secondary tubes are backwards and 
+// the order of the strips on my art car doesn't match the order of FastLeds' parallel output.
+// phew.
 void showLeds()
 {
-  // 14 virtual strips
   for(int currentStrip = 0; currentStrip < numStrips; currentStrip++) 
   {
       // map from my model (the order of the strips on the car) to fastled
-      // to be honest I don'tt know how fastled determines the order. it's not
+      // to be honest I don't know how fastled determines the order. it's not
       // based on the pin numbers so it must have something to do with the dma
-    byte fastLedStrip = tubes[currentStrip];
 
-    // the 2nd light strip is connected to the end of the 3rd light strip
+    // ground effects come first, they're stored at the end of pin 4
     if(currentStrip == 0)
     {
-        // make the end of the tube white for debugging purposes
-        //realLeds[currentStrip][tubeLengths[2]] = CRGB::White;
-
-        // first deal with the third tube
-        for(int iLed = 0; iLed <= tubeLengths[2]; iLed++) 
+        for(int iLed = 0; iLed < tubeLength[currentStrip]; iLed++) 
         {
-            realLeds[fastLedStrip][iLed] = leds[currentStrip][iLed];
+            realLeds[tubes[4]][tubeLength[4] + tubeLength[1] + iLed] = leds[currentStrip][iLed];
         }
-
-        // this one is backwards
-        for(int iLed = 0; iLed <= tubeLengths[1]; iLed++) 
-        {
-            realLeds[fastLedStrip][tubeLengths[1] + tubeLengths[2]-iLed] = leds[1][iLed];
-        }
-
-      //leds[tubes[currentTube]][tubeLengths[1]+ tubeLengths[2]] = CRGB::White;
     }
-
-    // the 1st light strip is connected to the end of the 4th  light strip
+    // tube 1 also shares a pin with tube 4 (but it's backwards)
     else if(currentStrip == 1)
     {
-        // this one is backwards
-        for(int iLed = 0; iLed <= tubeLengths[0]; iLed++) 
+        // virtual strip 0 is on the same strip as physical tube 3 and backwards!
+        for(int iLed = 0; iLed < tubeLength[currentStrip]; iLed++) 
         {
-            realLeds[fastLedStrip][tubeLengths[0] + tubeLengths[3]-iLed] = leds[0][iLed];
+            realLeds[tubes[4]][tubeLength[currentStrip] + tubeLength[4]-iLed - 1] = leds[currentStrip][iLed];
         }
-
-        // first deal with the third tube
-        for(int iLed = 0; iLed <= tubeLengths[3]; iLed++) 
-        {
-            realLeds[fastLedStrip][iLed] = leds[currentStrip][iLed];
-        }
-
-      //leds[tubes[currentTube]][tubeLengths[3]] = CRGB::White;
-      //leds[tubes[currentTube]][tubeLengths[0]+tubeLengths[3]] = CRGB::White;
-    } else if (currentStrip == tailLights)
+    }
+    // tubes 2 and 3 share pin 3 (and 2 is backwards)
+    else if(currentStrip == 2)
     {
-        // skip the tailLights because I animate them 
-        // using pulsejets. I'm not sure why but maybe so that
-        // when the car is showing the same thing on all strips
-        // they don't also show that. it's not great seperation of 
-        // duties so I should fix this at some point 
+        // this one is backwards
+        for(int iLed = 0; iLed < tubeLength[currentStrip]; iLed++) 
+        {
+            realLeds[tubes[3]][tubeLength[currentStrip] + tubeLength[3]-iLed -1] = leds[currentStrip][iLed];
+        }
     }
     else
     {
-        for(int iLed = 0; iLed <= tubeLengths[currentStrip]; iLed++) 
+        for(int iLed = 0; iLed < tubeLength[currentStrip]; iLed++) 
         {
-            CRGB color = leds[currentStrip][iLed];
-            switch(currentStrip)
-            {
-                case 3:
-                    color = CRGB::Blue;
-                    break;
-            }
-            realLeds[fastLedStrip][iLed] = color;
+            realLeds[tubes[currentStrip]][iLed] = leds[currentStrip][iLed];
         }
     }
   }
 
   LEDS.show();
-
-}
-
-void oldShowLeds()
-{
-    // there are 13 phyical strips, but the first three are all on one logical strip
-    for (byte iStrip = 0;iStrip < numTubes;iStrip++)
-    {
-        switch(iStrip)
-        {
-            case 0:
-                for(int iLed = 0;iLed < tubeLengths[iStrip];iLed++)
-                {
-                    realLeds[0][iLed+155] = leds[iStrip][mapLed(iLed, ledCount, tubeLengths[iStrip])];
-                }                
-                break;
-            case 1: 
-                // this one is backwards
-                for(int iLed = 0;iLed < tubeLengths[iStrip];iLed++)
-                {
-                    realLeds[0][154-iLed] = leds[iStrip][mapLed(iLed, ledCount, tubeLengths[iStrip])];
-                }                
-                break;
-            case 2:
-                for(int iLed = 0;iLed < 84;iLed++)
-                {
-                    realLeds[0][iLed] = leds[iStrip][mapLed(iLed, ledCount, tubeLengths[iStrip])];
-                }                
-                break;
-            case 3: 
-            default:
-                for(int iLed = 0;iLed < ledCount;iLed++)
-                {
-                    realLeds[iStrip - 2][iLed] = leds[iStrip][mapLed(iLed, ledCount, tubeLengths[iStrip])];
-                }
-            break;
-        }
-    }
-
-    LEDS.show();
-
 }
 
 void colorPaletteLoop()
@@ -344,7 +249,6 @@ void FillLEDsFromPaletteColors( uint8_t colorIndex, uint8_t width)
         }
     }
 }
-
 
 // There are several different palettes of colors demonstrated here.
 //
@@ -442,13 +346,14 @@ const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM =
 //------------------------------------- UTILITY FXNS --------------------------------------
 
 //-SET THE COLOR OF A SINGLE RGB LED on all tubes
-void setPixel(int adex, int cred, int cgrn, int cblu) {
-    if (adex < 0 || adex > longestTube-1)
+void setPixel(int pixel, int cred, int cgrn, int cblu) {
+    if (pixel < 0 || pixel > longestTube-1)
         return;
 
     for(int i = 0;i<numTubes;i++)
     {
-        leds[i][adex] = CRGB(cred, cgrn, cblu);
+
+        leds[i][pixel] = CRGB(cred, cgrn, cblu);
     }
 }
 
@@ -465,7 +370,10 @@ void setPixel(int adex, CRGB c) {
 // assumes all of the strips have the same stuff on them
 CRGB getPixel(int pixel)
 {
-    return leds[0][pixel];
+    // the first strip is ground effect lighting (and the last are taillights)
+    // i'm choosing one of the back of the car in case I do any mapping since
+    // the front strips are shorter
+    return leds[10][pixel];
 }
 
 //-FIND INDEX OF HORIZONAL OPPOSITE LED
@@ -565,18 +473,6 @@ void copy_led_array(){
     }
 }
 
-void fillBuffer()
-{
-    for(int iTube = 0; iTube < numTubes; iTube++ ) 
-    {
-        for(int iLed = 0; iLed < longestTube;iLed++)
-        {
-            ledBuffer[iTube][iLed] = leds[iTube][iLed];
-        }
-    }
-}
-
-
 // todo: make this work with multiple arrays
 void print_led_arrays(int ilen){
     copy_led_array();
@@ -604,7 +500,7 @@ void print_led_arrays(int ilen){
 void addGlitter( fract8 chanceOfGlitter) 
 {
   if( random8() < chanceOfGlitter) {
-    leds[random8(14)][ random16(longestTube) ] += CRGB::White;
+    leds[random8(numTubes)][ random16(longestTube-1) ] += CRGB::White;
   }
 }
 
@@ -625,10 +521,10 @@ void DrawOneFrame( byte startHue8, int8_t yHueDelta8, int8_t xHueDelta8)
 }
 
 
-void fillSolid(byte strand, const CRGB& color)
+void fillSolid(byte strand, CRGB color)
 {
     // fill_solid -   fill a range of LEDs with a solid color
- fill_solid( leds[strand], longestTube, color);
+ fill_solid( leds[strand], tubeLength[strand], color);
 }
 
 void fillSolid(CRGB color)
@@ -639,66 +535,6 @@ void fillSolid(CRGB color)
 
 void fillSolid(int cred, int cgrn, int cblu) { //-SET ALL LEDS TO ONE COLOR
     fillSolid(0, CRGB(cred, cgrn, cblu));    
-}
-
-void explosion()
-{
-    static int counter = 0;
-    counter++; 
-
-    leds[random8(numTubes)][random8(longestTube)] = CRGB(255,0,0);
-//    leds[5][5] = CRGB(255,0,0);
-
-    fillBuffer();
-
-//    blur2d(*leds, numTubes, longestTube, 64);
-
-    for(byte iStrip = 1;iStrip < numTubes-1;iStrip++)
-    {
-        for(int iLed = 1; iLed < longestTube-1;iLed++)
-        {
-
-            if (ledBuffer[iStrip][iLed].red > 200)
-            {            
-                ledBuffer[iStrip][iLed].red = 0;
-                //printLed(iStrip, iLed);
-            }
-
-            // BUG: why am I reseting count here?
-            int count = 0;
-            if (ledBuffer[iStrip-1][iLed].red > 200)
-            {
-                count++;
-            } 
-            if (ledBuffer[iStrip-1][iLed-1].red > 200)
-            {
-                count++;
-            }
-            if (ledBuffer[iStrip][iLed-1].red > 200)
-                count++;
-
-            if (count > 0)
-            {
-                Serial.print("*");
-                printLed(iStrip, iLed);
-                leds[iStrip][iLed] = CRGB(255, 0, 0);
-            }
-        }
-        Serial.println();
-    }
-    //for(int i = 0;i<numStrips;i++)
-    //    fadeToBlackBy(leds[i], longestTube, 30);
-}
-
-void printLed(int s, byte l)
-{
-    Serial.print("[");
-    Serial.print(s);
-    Serial.print(".");
-    Serial.print(l);
-    Serial.print(".");
-    Serial.print(ledBuffer[s][l]);
-    Serial.print("]");
 }
 
 void plasma() 
@@ -747,8 +583,6 @@ void ripple() {
     static uint8_t myfade = 255;                                         // Starting brightness.
     const byte maxsteps = 16;                                           // Case statement wouldn't allow a variable.
 
-    uint8_t bgcol = 0;                                            // Background colour rotates.
-
     for(byte iStrip =0;iStrip < numTubes;iStrip++)
     {
         fadeToBlackBy( leds[iStrip], longestTube, 20);
@@ -762,7 +596,7 @@ void ripple() {
         break;
 
         case 0:
-        setPixel(center,ColorFromPalette(currentPalette, colour, myfade, currentBlending));
+        setPixel(center,ColorFromPalette(OceanColors_p, colour, myfade, currentBlending));
         
         step ++;
         break;
@@ -773,8 +607,8 @@ void ripple() {
 
         default:                                                          // Middle of the ripples.
         // Simple wrap from Marc Miller
-        setPixel((center + step + longestTube) % longestTube, getPixel((center + step + longestTube) % longestTube) + ColorFromPalette(currentPalette, colour, myfade/step*2, currentBlending));       
-        setPixel((center - step + longestTube) % longestTube, getPixel((center + step + longestTube) % longestTube) + ColorFromPalette(currentPalette, colour, myfade/step*2, currentBlending));
+        setPixel((center + step + longestTube) % longestTube, getPixel((center + step + longestTube) % longestTube) + ColorFromPalette(OceanColors_p, colour, myfade/step*2, currentBlending));       
+        setPixel((center - step + longestTube) % longestTube, getPixel((center + step + longestTube) % longestTube) + ColorFromPalette(OceanColors_p, colour, myfade/step*2, currentBlending));
         step ++;                                                         // Next step.
         break;  
     } // switch step
@@ -829,16 +663,28 @@ void juggle()
   // eight colored dots, weaving in and out of sync with each other
     for(byte iStrip =0;iStrip < numTubes;iStrip++)
     {
-        fadeToBlackBy( leds[iStrip], longestTube, 20);
+        fadeToBlackBy( leds[iStrip], tubeLength[iStrip], 20);
     }
     
     byte dothue = 0;
     for( int i = 0; i < numTubes; i++) {
-        leds[i][beatsin16(i+7,0,longestTube/2)] |= CHSV(dothue, 200, 255);
+        leds[i][beatsin16(i+7,0,tubeLength[i]/2)] |= CHSV(dothue, 200, 255);
     dothue += 32;
     }
     mirror();
 
+}
+
+void simpleColors()
+{
+  static byte d = 0;
+  byte hue = d;
+  for(byte tube = 0;tube<numTubes;tube++)
+  {
+      fillSolid(tube, CHSV(hue, 255, 255));
+      hue += 50;
+  }
+  d+=1;
 }
 
 void sinelon()
@@ -1427,8 +1273,15 @@ void loop()
 {
     // first update all of my buttons to check if any are down
     buttons->refresh();
-    
-    
+
+    for (byte i = 0;i<16;i++)
+    {
+        if (buttons->state(i))
+        {
+            Serial.print(i);Serial.print(" on");Serial.println();
+        }
+    }
+
     if(buttons->state(0))
     {
         currentPalette = HeatColors_p;
@@ -1446,39 +1299,14 @@ void loop()
     else if (buttons->state(3))
     {
         spiralRainbow();
+//        simpleColors();
     }
     else if (buttons->state(4))
     {
-        sinelon();
+        currentPalette = HeatColors_p;
+        ripple();    
     }
     else if (buttons->state(5))
-    {
-        juggle();
-    }
-    else if (buttons->state(6))
-    {
-        currentPalette = HeatColors_p;
-        // generate noise data
-        fillnoise8();
-        
-        // convert the noise data to colors in the LED array
-        // using the current palette
-        mapNoiseToLEDsUsingPalette();
-        //mirror();
-    }
-    else if (buttons->state(7))
-    {
-        currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
-
-        // generate noise data
-        fillnoise8();
-        
-        // convert the noise data to colors in the LED array
-        // using the current palette
-        mapNoiseToLEDsUsingPalette();
-        mirror();
-    }
-    else if (buttons->state(8))
     {
         EVERY_N_MILLISECONDS(50) 
         {   // FastLED based non-blocking delay to update/display the sequence.
@@ -1497,63 +1325,32 @@ void loop()
             targetPalette = CRGBPalette16(CHSV(baseC+random8(32), 192, random8(128,255)), CHSV(baseC+random8(32), 255, random8(128,255)), CHSV(baseC+random8(32), 192, random8(128,255)), CHSV(baseC+random8(32), 255, random8(128,255)));
         }
     } 
-    else if (buttons->state(9))
+    else if (buttons->state(6))
     {
-        blendwave();
-    } 
-    else if (buttons->state(10))
-    {
-        const int thisdelay = 60;                                          // Standard delay value.
+        currentPalette =  CRGBPalette16( CRGB::Black, CRGB::Blue, CRGB::Aqua,  CRGB::White);
 
-        EVERY_N_MILLISECONDS(100) 
-        {
-            uint8_t maxChanges = 24; 
-            nblendPaletteTowardPalette(currentPalette, targetPalette, maxChanges);   // AWESOME palette blending capability.
-        }
-
-        EVERY_N_SECONDS(3) 
-        {
-            targetPalette = CRGBPalette16(CHSV(random8(), 255, 32), CHSV(random8(), random8(64)+192, 255), CHSV(random8(), 255, 32), CHSV(random8(), 255, 255)); 
-        }
-
-        EVERY_N_MILLISECONDS(thisdelay) 
-        {                                   // FastLED based non-blocking delay to update/display the sequence.
-            ripple();
-        }
-    } 
-    else if (buttons->state(11))
+        // generate noise data
+        fillnoise8();
+        
+        // convert the noise data to colors in the LED array
+        // using the current palette
+        mapNoiseToLEDsUsingPalette();
+        mirror();
+    }
+    else if (buttons->state(7))
     {
         police_lightsALL();
+//        blendwave();
     } 
-    else if (buttons->state(12))
-    {
-        fourthOfJuly();
-    } 
-    else if (buttons->state(13))
-    {
-        explosion();
-    }
-    else if (buttons->state(14))
-    {
-        EVERY_N_MILLISECONDS(50)
-        {
-            uint32_t ms = millis();
-            //int32_t yHueDelta32 = ((int32_t)cos16( ms * 27 ) * (350 / kMatrixWidth));
-            //int32_t xHueDelta32 = ((int32_t)cos16( ms * 39 ) * (310 / kMatrixHeight));
-            int32_t yHueDelta32 = ((int32_t)cos16( ms * 27 ) * (400 / kMatrixWidth));
-            int32_t xHueDelta32 = ((int32_t)cos16( ms * 39 ) * (200 / kMatrixHeight));
-            DrawOneFrame( ms / 65536, yHueDelta32 / 32768, xHueDelta32 / 32768);
-        }
-    }
     else
     {
-        rotatingRainbow();
-        mirror();
+      Serial.println("other button state");
+      rotatingRainbow();
+      mirror();
     }
     
     //send the 'leds' array out to the actual LED strip
     pulseJets();
-
 
     debugColors(); // temporarily let me see which hoop is which
     showLeds();  
@@ -1565,14 +1362,6 @@ void loop()
     EVERY_N_MILLISECONDS( 20 ) { gHue++; } // slowly cycle the "base color" through the rainbow
 }
 
-#define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
-
-void nextPattern()
-{
-  // add one to the current pattern number, and wrap around at the end
-  gCurrentPatternNumber = (gCurrentPatternNumber + 1) % ARRAY_SIZE( gPatterns);
-}
-
 void rainbowWithGlitter() 
 {
   // built-in FastLED rainbow, plus some random sparkly glitter
@@ -1580,58 +1369,33 @@ void rainbowWithGlitter()
   addGlitter(80);
 }
 
-void flashSmile()
-{
-  static bool isSmile = false;
-  static byte smileCount = 0;
-  if(random16(5000) == 0)
-  {    
-    isSmile = true;
-    smileCount = 0;
-  }
-
-  if (isSmile == true)
-  {
-        smileCount++;
-        if (smileCount == 10)
-            isSmile = false;
-
-        smile();
-  }
-  else
-  {
-    pulseJets();
-  }
-}
-
 void debugColors()
 {
 
-  for(int i = 0;i< numStrips;i++)
+  // numStrips refers to the number of physical strips 
+  // each strip is one pin on the teensy
+  for(int currentStrip = 0;currentStrip< numStrips;currentStrip++)
   {
-    // make the last one blue
-    leds[i][tubeLengths[i]-1] = CRGB::Blue;
-
-    // make the middle one white
-    leds[i][ledCount/2] = CRGB::White;
 
     // purple for every 10 lights
-    for(int l = 0;l<ledCount;l++)
+    for(int currentLed = 1;currentLed<longestTube;currentLed++)
     {
-      if (l % 10 == 0)
-            leds[i][l] = CRGB::Purple;
+      if (currentLed > tubeLength[currentStrip] -1)
+        break;
+      if (currentLed % 10 == 0)
+            leds[currentStrip][currentLed] = CRGB::Purple;
     }
+
+    // make the middle one white
+    leds[currentStrip][tubeLength[currentStrip]/2] = CRGB::White;
+
+    // make the last one blue
+    leds[currentStrip][tubeLength[currentStrip]-1] = CRGB::Blue;
+
+    //set the first n lights green where n = the index of the current strip
+    for (int currentLed = 0; currentLed < currentStrip+1; currentLed++)    
+      leds[currentStrip][currentLed] = CRGB::Green;
   }
-
-  for(byte s = 0;s < numStrips;s++)
-    leds[s][0] = CRGB::Purple;
-
-  for(byte s = 0;s < numStrips;s++)
-  {
-    for (int h = 1; h < s+1; h++)    
-        leds[s][h] = CRGB::Green;
-  }
-
 }
 
 // Fire2012 by Mark Kriegsman, July 2012
@@ -1715,10 +1479,10 @@ void Fire2012WithPalette()
 // mirrors the array of leds (nice for the fire since I want it to be symmetrical
 void mirror()
 {
-  for(byte col = 0;col < numTubes;col++)
+  for(byte tube = 0;tube < numTubes;tube++)
   {
-    for(int row = 0;row < longestTube/2;row++)
-      leds[col][longestTube - row -1] = leds[col][row];  
+    for(int row = 0;row < tubeLength[tube]/2;row++)
+      leds[tube][tubeLength[tube] - row -1] = leds[tube][row];  
   }
 }
 
@@ -1882,6 +1646,30 @@ CRGB getFlameColor()
 
 CRGB getFlameColorFromPalette()
 {
+
+    const CRGBPalette16 flames =
+    {
+        0xFF00FF,
+        0xFF00FF,
+        0xFF00FF,
+        0xFF00FF,
+
+        0xFF0088,
+        0xFF0088,
+        0xFF0088,
+        0xFF0088,
+
+        0x0000AA,
+        0x0000AA,
+        0x0000AA,
+        0x0000AA,
+
+        0x880000,
+        0x880000,
+        0x880000,
+        0x880000
+    };
+
     const CRGBPalette16 reverseFlames =
     {
         0x00FF00,
@@ -1929,51 +1717,27 @@ CRGB getFlameColorFromPalette()
     };
 
 
-    if (buttons->isLifeTestOn())
+    if (!buttons->isLifeTestOn())
         return ColorFromPalette(coldFlames, random8(), 128, LINEARBLEND);
     else
         return ColorFromPalette(reverseFlames, random8(), 128, LINEARBLEND);
 
 }
 
+
 void pulseJets()
 {
-  for (int i = 0;i<50;i++)
+        
+  for (int iLed = 0;iLed<50;iLed++)
   {
-    realLeds[tubes[tailLights]][i] = getFlameColorFromPalette();
-    realLeds[tubes[tailLights]][99-i] = getFlameColorFromPalette();
-
-    //leds[tailLights][i] += CRGB(redShift,0,0);
-    //leds[tailLights][99-i]+= CRGB(redShift,0,0);
+    CRGB color = ColorFromPalette(LavaColors_p, random8(), 128, LINEARBLEND);
+    // swap red and green because the tail lights are a different strip that swap r&g.
+    byte r = color.r;
+    color.r = color.g;
+    color.g = r;
+    leds[tailLights][iLed] = color;
+    leds[tailLights][99-iLed] = color;
   }
-}
-
-void smile()
-{
-  fill_solid(realLeds[tubes[tailLights]], ledCount, CRGB::Black);
-  //for (int i = 0; i<32;i++)
-  //  leds[tailLights][i] = CRGB::Red;
-
-  for (int i = 36; i<43;i++)
-    realLeds[tubes[tailLights]][i] = CRGB::Red;
-
-  realLeds[tubes[tailLights]][44] = CRGB::Blue;
-  realLeds[tubes[tailLights]][34] = CRGB::Blue;
-
-  realLeds[tubes[tailLights]][49] = CRGB::Purple;
-}
-
-void bigSmile()
-{
-  fill_solid(realLeds[tailLights], ledCount, CRGB::Black);
-
-  for (int i = 8; i<23;i++)
-    realLeds[tubes[tailLights]][i] = CRGB::Red;
-
-  realLeds[tubes[tailLights]][3] = CRGB::Blue;
-  realLeds[tubes[tailLights]][27] = CRGB::Blue;
-
-  realLeds[tubes[tailLights]][49] = CRGB::HotPink;
 
 }
 
