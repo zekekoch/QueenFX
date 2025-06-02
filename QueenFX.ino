@@ -15,7 +15,7 @@ const byte numStrips = 16;
 CRGB leds[numStrips][longestTube];
 
 // I'm using the teensy 3.2 with 16 pins (DMA)
-// I'm not using 3 of the pins, but I'm keeping this retangular for ease of thinking
+// I'm not using 3 of the pins, but I'm keeping this rectangular for ease of thinking
 const byte numVirtualStrips = 16;
 CRGB realLeds[numVirtualStrips][ledCount];
 
