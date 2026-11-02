@@ -13,6 +13,13 @@ TLC59711 LED drivers.
   sets their colors through the TLC59711 boards.
 - `Mux.h`: reads the 4067 multiplexer that the buttons and dials are
   wired to.
+- `hardware/`: the controller board (QueenController 2022b), in Eagle
+  9.6 format.
+  - `queencontroller2022.sch`: schematic.
+  - `queencontroller2022.brd`: board layout.
+  - `queencontroller2022.pdf`: a mirrored print of the board layout,
+    from Apr 10, 2022. The `.brd` was edited after that (Aug 7, 2022),
+    so the print may not match it.
 
 ## Setup
 
