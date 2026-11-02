@@ -35,7 +35,6 @@ const byte FRAMES_PER_SECOND = 240;
 // the front of the car has shorter lights
 const int tubeLength[numStrips] = {16, 79, 136, 163, 201, 254, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube,100} ;
 //const int tubeScale[numStrips] = {16/longestTube*256, 79/longestTube*256, 136/longestTube*256, 163/longestTube*256, 201/longestTube*256, 254/longestTube*256, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube, longestTube,100/longestTube*256} ;
-=======
 //const int tubeLength[numStrips] = {16,16,16,16,16,16,16,16,16,16,16,16,16,16};
 CButtons *buttons = new CButtons;
 
