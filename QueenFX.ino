@@ -1335,9 +1335,11 @@ void loop()
     }
     else if (buttons->state(7))
     {
-        police_lightsALL();
-//        blendwave();
-    } 
+        // press again to turn it off (the buttons latch)
+        for (int iStrip = 0; iStrip < numStrips; iStrip++)
+            fill_solid(leds[iStrip], longestTube, CRGB::Black);
+        debugColors(); // see which hoop is which
+    }
     else
     {
       Serial.println("other button state");
@@ -1348,8 +1350,7 @@ void loop()
     //send the 'leds' array out to the actual LED strip
     pulseJets();
 
-    debugColors(); // temporarily let me see which hoop is which
-    showLeds();  
+    showLeds();
 
     // insert a delay to keep the framerate modest
     FastLED.delay(1000/FRAMES_PER_SECOND); 
